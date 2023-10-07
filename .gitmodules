@@ -4,3 +4,6 @@
 [submodule "ext/sigmatch"]
 	path = ext/sigmatch
 	url = https://github.com/SpriteOvO/sigmatch.git
+[submodule "ext/json"]
+	path = ext/json
+	url = https://github.com/nlohmann/json.git

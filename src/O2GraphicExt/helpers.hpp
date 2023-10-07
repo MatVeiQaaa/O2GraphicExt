@@ -4,6 +4,7 @@
 #include <fstream>
 #include <iomanip>
 #include <iostream>
+#include <vector>
 
 static void Log(const std::string format, ...) 
 {
@@ -48,4 +49,18 @@ static BOOL CanAccess(uintptr_t ptr)
         return 1;
     }
     return 0;
+}
+
+static uintptr_t FollowPointers(uintptr_t base, std::vector<int> offsets)
+{
+    uintptr_t addr = base;
+    for (int i = 0; i < offsets.size() - 1; i++) {
+        addr += offsets[i];
+        if (!CanAccess(addr)) {
+            return NULL;
+        }
+        addr = *(uintptr_t*)addr;
+    }
+    addr += offsets[offsets.size() - 1];
+    return addr;
 }

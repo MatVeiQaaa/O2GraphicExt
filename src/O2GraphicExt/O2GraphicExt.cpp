@@ -9,6 +9,7 @@
 
 #include "minhook/include/MinHook.h"
 #include "sigmatch/include/sigmatch/sigmatch.hpp"
+#include "json/single_include/nlohmann/json.hpp"
 
 #if defined _M_X64
 #pragma comment(lib, "libMinHook.x64.lib")
@@ -27,6 +28,8 @@ struct ResDetails
 	DWORD idc;
 	char name[256];
 };
+
+int* currentState = NULL;
 
 struct OJT
 {
@@ -84,14 +87,78 @@ loadSceneElement LoadSceneElement = NULL;
 
 uintptr_t __fastcall OnLoadSceneElement(DWORD* buffer, DWORD edx, DWORD idc, ResDetails* resDetails)
 {
-	std::stringstream log;
-	log << std::hex << idc << ": " << resDetails->name << " at address " << buffer;
-	Logger(log.str());
 	uintptr_t result = LoadSceneElement(buffer, idc, resDetails);
 	Resource* resource = (Resource*)buffer;
-	if (resource->data->type == 3 && strncmp(resDetails->name, "Note_ComboNum1.ojt", 256) == 0)
+
+	using json = nlohmann::json;
+	std::ifstream cfgInFile;
+	std::ofstream cfgOutFile;
+	cfgInFile.open("O2GraphicExt.json");
+	bool generateConfigData = 0;
+	json config;
+	if (cfgInFile.peek() == std::ifstream::traits_type::eof() || !cfgInFile.is_open())
 	{
-		ScaleOjt(resource->data->ojt, 0.8f);
+		cfgInFile.close();
+		cfgOutFile.open("O2GraphicExt.json", std::ios_base::app);
+		using json = nlohmann::json;
+		json generateConfig; 
+		generateConfig["generateConfig"] = true;
+		cfgOutFile << std::setw(4) << generateConfig << std::endl;
+		cfgOutFile.close();
+	}
+
+	cfgInFile.open("O2GraphicExt.json");
+	config = json::parse(cfgInFile);
+	cfgInFile.close();
+
+	if (*currentState != 11)
+	{
+		cfgOutFile.open("O2GraphicExt.json");
+		config["generateConfig"] = false;
+		cfgOutFile << std::setw(4) << config << std::endl;
+		cfgOutFile.close();
+	}
+
+	generateConfigData = config.at("generateConfig");
+
+	if (generateConfigData)
+	{
+		json element;
+		element[resDetails->name]["Position"] = 
+		{
+				{"X", resource->data->X},
+				{"Y", resource->data->Y}
+		};
+		if (resource->data->type == 3)
+		{
+			element[resDetails->name]["Scale"] =
+			{
+				{"X", resource->data->ojt->XScale},
+				{"Y", resource->data->ojt->YScale},
+				{"Multiplier", resource->data->ojt->scaleAllRelative}
+			};
+		}
+		json finalJson;
+		cfgInFile.open("O2GraphicExt.json");
+		finalJson = json::parse(cfgInFile);
+		finalJson.merge_patch(element);
+		cfgInFile.close();
+		cfgOutFile.open("O2GraphicExt.json");
+		cfgOutFile << std::setw(4) << finalJson << std::endl;
+		cfgOutFile.close();
+	}
+	
+	if (!generateConfigData && *currentState == 11)
+	{
+		resource->data->X = config[resDetails->name]["Position"]["X"];
+		resource->data->Y = config[resDetails->name]["Position"]["Y"];
+		if (resource->data->type == 3)
+		{
+			resource->data->ojt->XScale = config[resDetails->name]["Scale"]["X"];
+			resource->data->ojt->YScale = config[resDetails->name]["Scale"]["Y"];
+			resource->data->ojt->scaleAllRelative = config[resDetails->name]["Scale"]["Multiplier"];
+			ScaleOjt(resource->data->ojt, resource->data->ojt->scaleAllRelative);
+		}
 	}
 
 	return result;
@@ -99,16 +166,17 @@ uintptr_t __fastcall OnLoadSceneElement(DWORD* buffer, DWORD edx, DWORD idc, Res
 
 int O2GraphicExt::init(HMODULE hModule)
 {
+	Sleep(5000);
 	uintptr_t hOtwo = (uintptr_t)GetModuleHandle("OTwo.exe");
 	MODULEINFO modOtwo;
 	GetModuleInformation(GetCurrentProcess(), (HMODULE)hOtwo, &modOtwo, sizeof(MODULEINFO));
-	Logger("\n New Launch");
 	using namespace sigmatch_literals;
 	sigmatch::this_process_target target;
 	sigmatch::search_context context = target.in_module("OTwo.exe");
 
 	LoadSceneElement = (loadSceneElement)((uintptr_t)hOtwo + 0x05B0C0);
 	ScaleOjt = (scaleOjt)((uintptr_t)hOtwo + 0x108C0);
+	currentState = (int*)FollowPointers(hOtwo, { 0x1C8884, 0x50 });
 
 	if (MH_Initialize() != MH_OK)
 	{
