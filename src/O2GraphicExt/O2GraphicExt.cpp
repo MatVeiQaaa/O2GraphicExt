@@ -23,13 +23,14 @@ inline MH_STATUS MH_CreateHookEx(LPVOID pTarget, LPVOID pDetour, T** ppOriginal)
 	return MH_CreateHook(pTarget, pDetour, reinterpret_cast<LPVOID*>(ppOriginal));
 }
 
+int* previousState = NULL;
+int* currentState = NULL;
+
 struct ResDetails
 {
 	DWORD idc;
 	char name[256];
 };
-
-int* currentState = NULL;
 
 struct OJT
 {
@@ -90,7 +91,7 @@ uintptr_t __fastcall OnLoadSceneElement(DWORD* buffer, DWORD edx, DWORD idc, Res
 	uintptr_t result = LoadSceneElement(buffer, idc, resDetails);
 	Resource* resource = (Resource*)buffer;
 
-	using json = nlohmann::json;
+	using json = nlohmann::ordered_json;
 	std::ifstream cfgInFile;
 	std::ofstream cfgOutFile;
 	cfgInFile.open("O2GraphicExt.json");
@@ -111,7 +112,7 @@ uintptr_t __fastcall OnLoadSceneElement(DWORD* buffer, DWORD edx, DWORD idc, Res
 	config = json::parse(cfgInFile);
 	cfgInFile.close();
 
-	if (*currentState != 11)
+	if (*previousState == 11 && config["generateConfig"] == true)
 	{
 		cfgOutFile.open("O2GraphicExt.json");
 		config["generateConfig"] = false;
@@ -121,23 +122,21 @@ uintptr_t __fastcall OnLoadSceneElement(DWORD* buffer, DWORD edx, DWORD idc, Res
 
 	generateConfigData = config.at("generateConfig");
 
-	if (generateConfigData)
+	if (generateConfigData && *currentState == 11 && resource->data->type == 3)
 	{
 		json element;
-		element[resDetails->name]["Position"] = 
+		/*element[resDetails->name]["Position"] = 
 		{
 				{"X", resource->data->X},
 				{"Y", resource->data->Y}
-		};
-		if (resource->data->type == 3)
+		};*/
+		
+		element[resDetails->name]["Scale"] =
 		{
-			element[resDetails->name]["Scale"] =
-			{
-				{"X", resource->data->ojt->XScale},
-				{"Y", resource->data->ojt->YScale},
-				{"Multiplier", resource->data->ojt->scaleAllRelative}
-			};
-		}
+			{"X", resource->data->ojt->XScale},
+			{"Y", resource->data->ojt->YScale},
+			{"Multiplier", resource->data->ojt->scaleAllRelative}
+		};
 		json finalJson;
 		cfgInFile.open("O2GraphicExt.json");
 		finalJson = json::parse(cfgInFile);
@@ -176,6 +175,7 @@ int O2GraphicExt::init(HMODULE hModule)
 
 	LoadSceneElement = (loadSceneElement)((uintptr_t)hOtwo + 0x05B0C0);
 	ScaleOjt = (scaleOjt)((uintptr_t)hOtwo + 0x108C0);
+	previousState = (int*)FollowPointers(hOtwo, { 0x1C8884, 0x4C });
 	currentState = (int*)FollowPointers(hOtwo, { 0x1C8884, 0x50 });
 
 	if (MH_Initialize() != MH_OK)
