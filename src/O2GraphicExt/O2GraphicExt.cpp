@@ -149,8 +149,8 @@ uintptr_t __fastcall OnLoadSceneElement(DWORD* buffer, DWORD edx, DWORD idc, Res
 	
 	if (!generateConfigData && *currentState == 11)
 	{
-		resource->data->X = config[resDetails->name]["Position"]["X"];
-		resource->data->Y = config[resDetails->name]["Position"]["Y"];
+		//resource->data->X = config[resDetails->name]["Position"]["X"];
+		//resource->data->Y = config[resDetails->name]["Position"]["Y"];
 		if (resource->data->type == 3)
 		{
 			resource->data->ojt->XScale = config[resDetails->name]["Scale"]["X"];
