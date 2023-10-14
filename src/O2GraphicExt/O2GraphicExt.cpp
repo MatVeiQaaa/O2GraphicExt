@@ -72,6 +72,7 @@ struct Data
 	int Y;
 	BYTE unk4[0x144];
 	int currentFrame;
+	int frameCount;
 };
 
 struct Resource
@@ -83,6 +84,18 @@ struct Resource
 	Data* data;
 };
 
+typedef uintptr_t(__thiscall* sub_4690)(DWORD* pThis, DWORD arg1, char* resName, DWORD arg3, DWORD arg4);
+sub_4690 Sub_4690 = NULL;
+
+uintptr_t __fastcall OnSub_4690(DWORD* pThis, DWORD edx, DWORD arg1, char* resName, DWORD arg3, DWORD arg4)
+{
+	if (strncmp(resName, "Test", 4) == 0)
+	{
+		arg4 = 0; // band-aid to fix 50% crash chance on resource init. I have no idea what arg4 means, or what this function does exactly.
+	}
+	return Sub_4690(pThis, arg1, resName, arg3, arg4);
+}
+
 typedef void(__thiscall* scaleOjt)(OJT* ojt, float scale);
 scaleOjt ScaleOjt = NULL;
 
@@ -93,9 +106,28 @@ int comboCentrePoint = 72;
 int comboDigitWidth = 44;
 int comboDigitsSpacing = 0;
 bool comboSmallNumberCorrections = true;
-
+Resource* testRes;
+Resource* test2Res;
 uintptr_t __fastcall OnLoadSceneElement(DWORD* buffer, DWORD edx, DWORD idc, ResDetails* resDetails)
 {
+	if (strncmp(resDetails->name, "Test.ojs", 8) == 0)
+	{
+		ResDetails* testDetails = new ResDetails;
+		testDetails->idc = 0x1B500000;
+		strcpy(testDetails->name, "Test.ojs");
+		uintptr_t result = LoadSceneElement(buffer, 0x1B500000, testDetails);
+		Resource* resource = (Resource*)buffer;
+		return result;
+	}
+	if (strncmp(resDetails->name, "Test2.ojs", 9) == 0)
+	{
+		ResDetails* testDetails = new ResDetails;
+		testDetails->idc = 0x1B500000;
+		strcpy(testDetails->name, "Test2.ojs");
+		uintptr_t result = LoadSceneElement(buffer, 0x1B500000, testDetails);
+		Resource* resource = (Resource*)buffer;
+		return result;
+	}
 	uintptr_t result = LoadSceneElement(buffer, idc, resDetails);
 	Resource* resource = (Resource*)buffer;
 
@@ -226,6 +258,85 @@ int __fastcall OnDrawCombo(DWORD* pThis, DWORD edx, int combo, int x, int y)
 	return DrawCombo(pThis, combo, x, y);
 }
 
+typedef uintptr_t(__thiscall* loadRes)(DWORD* pThis, ResDetails* resDetails, DWORD* set);
+loadRes LoadRes = NULL;
+
+//Resource* testRes;
+bool firstTimeForPlaying = true;
+uintptr_t __fastcall OnLoadRes(DWORD* pThis, DWORD edx, ResDetails* resDetails, DWORD* set)
+{
+	uintptr_t returnStuff = LoadRes(pThis, resDetails, set);
+	if (firstTimeForPlaying && *previousState == 6 && *currentState == 11)
+	{
+		ResDetails testDetails;
+		testDetails.idc = 0x1B500000;
+		strcpy(testDetails.name, "Test.ojs");
+		testRes = (Resource*)LoadRes(pThis, &testDetails, 0);
+		testRes->data->currentFrame = 1;
+		testRes->data->frameCount = 1;
+		strcpy(testDetails.name, "Test2.ojs");
+		test2Res = (Resource*)LoadRes(pThis, &testDetails, 0);
+		test2Res->data->currentFrame = 1;
+		test2Res->data->frameCount = 1;
+		std::stringstream sstream;
+		sstream << "testRes: " << std::hex << testRes << '\n'
+			<< "test2Res: " << test2Res;
+		Logger(sstream.str());
+		firstTimeForPlaying = false;
+	}
+	if (*previousState == 11)
+	{
+		firstTimeForPlaying = true;
+	}
+	return returnStuff;
+}
+
+typedef int(__thiscall* initPlayingScene)(DWORD* pThis, DWORD unk);
+initPlayingScene InitPlayingScene = NULL;
+int __fastcall OnInitPlayingScene(DWORD* pThis, DWORD edx, DWORD unk)
+{
+
+	InitPlayingScene(pThis, unk);
+	ResDetails testDetails;
+	testDetails.idc = 0x1B500000;
+	strcpy(testDetails.name, "Test.ojs");
+	testRes = (Resource*)LoadRes(pThis, &testDetails, 0);
+	testRes->data->currentFrame = 1;
+	testRes->data->frameCount = 1;
+	strcpy(testDetails.name, "Test2.ojs");
+	test2Res = (Resource*)LoadRes(pThis, &testDetails, 0);
+	test2Res->data->currentFrame = 1;
+	test2Res->data->frameCount = 1;
+	std::stringstream sstream;
+	sstream << "testRes: " << std::hex << testRes << '\n'
+		<< "test2Res: " << test2Res;
+	Logger(sstream.str());
+	return 1;
+}
+
+typedef int(__thiscall* renderData)(Data* data, DWORD unk);
+renderData RenderData = NULL;
+
+typedef int(__thiscall* renderBg)(DWORD* pThis);
+renderBg RenderBg = NULL;
+
+int __fastcall OnRenderBg(DWORD* pThis, DWORD edx)
+{
+	
+	int result = RenderBg(pThis);
+
+	if (testRes != NULL)
+	{
+		RenderData(testRes->data, 0);
+	}
+	if (test2Res != NULL)
+	{
+		RenderData(test2Res->data, 0);
+	}
+
+	return result;
+}
+
 int O2GraphicExt::init(HMODULE hModule)
 {
 	Sleep(5000);
@@ -237,6 +348,11 @@ int O2GraphicExt::init(HMODULE hModule)
 	sigmatch::search_context context = target.in_module("OTwo.exe");
 
 	LoadSceneElement = (loadSceneElement)((uintptr_t)hOtwo + 0x05B0C0);
+	LoadRes = (loadRes)((uintptr_t)hOtwo + 0x0303A0);
+	Sub_4690 = (sub_4690)((uintptr_t)hOtwo + 0x4690);
+	InitPlayingScene = (initPlayingScene)((uintptr_t)hOtwo + 0x024B60);
+	RenderBg = (renderBg)((uintptr_t)hOtwo + 0x027D50);
+	RenderData = (renderData)((uintptr_t)hOtwo + 0x010B90);
 	ScaleOjt = (scaleOjt)((uintptr_t)hOtwo + 0x108C0);
 	previousState = (int*)FollowPointers(hOtwo, { 0x1C8884, 0x4C });
 	currentState = (int*)FollowPointers(hOtwo, { 0x1C8884, 0x50 });
@@ -257,9 +373,27 @@ int O2GraphicExt::init(HMODULE hModule)
 		return 1;
 	}
 
+	if (MH_CreateHookEx((LPVOID)Sub_4690, &OnSub_4690, &Sub_4690) != MH_OK)
+	{
+		Logger("Couldn't hook Sub_4690");
+		return 1;
+	}
+
 	if (MH_CreateHookEx((LPVOID)DrawCombo, &OnDrawCombo, &DrawCombo) != MH_OK)
 	{
 		Logger("Couldn't hook DrawCombo");
+		return 1;
+	}
+
+	if (MH_CreateHookEx((LPVOID)LoadRes, &OnLoadRes, &LoadRes) != MH_OK)
+	{
+		Logger("Couldn't hook InitPlayingScene");
+		return 1;
+	}
+
+	if (MH_CreateHookEx((LPVOID)RenderBg, &OnRenderBg, &RenderBg) != MH_OK)
+	{
+		Logger("Couldn't hook RenderBg");
 		return 1;
 	}
 
