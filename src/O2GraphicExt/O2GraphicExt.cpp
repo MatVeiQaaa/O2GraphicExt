@@ -29,69 +29,20 @@ uintptr_t hOtwo = NULL;
 int* previousState = NULL;
 int* currentState = NULL;
 
-struct ResDetails
-{
-	DWORD idc;
-	char name[256];
-};
-
-struct OJT
-{
-	uintptr_t* vTable;
-	BYTE unk1[0x28];
-	float XScale;
-	float YScale;
-	BYTE unk2[0x20];
-	int currentFrame;
-	BYTE unk3[0x4];
-	float scaleAllRelative;
-};
-
-struct Frame
-{
-	uintptr_t* vTable;
-	BYTE unk1[0x14];
-	char name[256];
-	short frameCount;
-	short encoder;
-	BYTE unk2[0x24];
-	int YSize;
-	int XSize;
-};
-
-struct Data
-{
-	uintptr_t* vTable;
-	Frame* frame;
-	BYTE unk1[0x4];
-	OJT* ojt;
-	BYTE unk2[0x4];
-	short type; // 1 == ojs, 3 == ojt
-	short unk3;
-	int X;
-	int Y;
-	BYTE unk4[0x144];
-	int currentFrame;
-	int frameCount;
-};
-
-struct Resource
-{
-	uintptr_t* vTable;
-	BYTE unk1[0xC];
-	DWORD idc;
-	BYTE unk2[0x44];
-	Data* data;
-};
+std::vector<std::string> addResources;
 
 typedef uintptr_t(__thiscall* sub_4690)(DWORD* pThis, DWORD arg1, char* resName, DWORD arg3, DWORD arg4);
 sub_4690 Sub_4690 = NULL;
 
 uintptr_t __fastcall OnSub_4690(DWORD* pThis, DWORD edx, DWORD arg1, char* resName, DWORD arg3, DWORD arg4)
 {
-	if (strncmp(resName, "Test", 4) == 0)
+	for (int i = 0; i < addResources.size(); i++)
 	{
-		arg4 = 0; // band-aid to fix 50% crash chance on resource init. I have no idea what arg4 means, or what this function does exactly.
+		if (strncmp(resName, addResources[i].c_str(), addResources[i].size()) == 0)
+		{
+			arg4 = 0; // band-aid to fix 50% crash chance on resource init. I have no idea what arg4 means, or what this function does exactly.
+			break;
+		}
 	}
 	return Sub_4690(pThis, arg1, resName, arg3, arg4);
 }
@@ -110,24 +61,6 @@ Resource* testRes;
 Resource* test2Res;
 uintptr_t __fastcall OnLoadSceneElement(DWORD* buffer, DWORD edx, DWORD idc, ResDetails* resDetails)
 {
-	if (strncmp(resDetails->name, "Test.ojs", 8) == 0)
-	{
-		ResDetails* testDetails = new ResDetails;
-		testDetails->idc = 0x1B500000;
-		strcpy(testDetails->name, "Test.ojs");
-		uintptr_t result = LoadSceneElement(buffer, 0x1B500000, testDetails);
-		Resource* resource = (Resource*)buffer;
-		return result;
-	}
-	if (strncmp(resDetails->name, "Test2.ojs", 9) == 0)
-	{
-		ResDetails* testDetails = new ResDetails;
-		testDetails->idc = 0x1B500000;
-		strcpy(testDetails->name, "Test2.ojs");
-		uintptr_t result = LoadSceneElement(buffer, 0x1B500000, testDetails);
-		Resource* resource = (Resource*)buffer;
-		return result;
-	}
 	uintptr_t result = LoadSceneElement(buffer, idc, resDetails);
 	Resource* resource = (Resource*)buffer;
 
@@ -141,7 +74,6 @@ uintptr_t __fastcall OnLoadSceneElement(DWORD* buffer, DWORD edx, DWORD idc, Res
 	{
 		cfgInFile.close();
 		cfgOutFile.open("O2GraphicExt.json", std::ios_base::app);
-		using json = nlohmann::json;
 		json generateConfig; 
 		generateConfig["generateConfig"] = true;
 		cfgOutFile << std::setw(4) << generateConfig << std::endl;
@@ -268,24 +200,35 @@ uintptr_t __fastcall OnLoadRes(DWORD* pThis, DWORD edx, ResDetails* resDetails, 
 	uintptr_t returnStuff = LoadRes(pThis, resDetails, set);
 	if (firstTimeForPlaying && *previousState == 6 && *currentState == 11)
 	{
-		ResDetails testDetails;
-		testDetails.idc = 0x1B500000;
-		strcpy(testDetails.name, "Test.ojs");
-		testRes = (Resource*)LoadRes(pThis, &testDetails, 0);
-		testRes->data->currentFrame = 1;
-		testRes->data->frameCount = 1;
-		strcpy(testDetails.name, "Test2.ojs");
-		test2Res = (Resource*)LoadRes(pThis, &testDetails, 0);
-		test2Res->data->currentFrame = 1;
-		test2Res->data->frameCount = 1;
-		std::stringstream sstream;
-		sstream << "testRes: " << std::hex << testRes << '\n'
-			<< "test2Res: " << test2Res;
-		Logger(sstream.str());
+		std::ifstream cfgInFile;
+		using json = nlohmann::ordered_json;
+		json config;
+		cfgInFile.open("O2GraphicExt.json");
+		config = json::parse(cfgInFile);
+		addResources = config["addResources"].get<std::vector<std::string>>();
+		addResources.insert(addResources.end(), O2GraphicExt::addResourcesOutside.begin(), O2GraphicExt::addResourcesOutside.end());
+		cfgInFile.close();
+
+		for (int i = 0; i < addResources.size(); i++)
+		{
+			ResDetails testDetails;
+			testDetails.idc = 0x1B500000;
+			strcpy(testDetails.name, addResources[i].c_str());
+			Resource* resource = (Resource*)LoadRes(pThis, &testDetails, 0);
+			resource->data->currentFrame = 1;
+			resource->data->frameCount = 1;
+			O2GraphicExt::addedResources.push_back(resource);
+			std::stringstream sstream;
+			sstream << testDetails.name << ": " << std::hex << resource;
+			Logger(sstream.str());
+		}
+
 		firstTimeForPlaying = false;
 	}
 	if (*previousState == 11)
 	{
+		addResources.clear();
+		O2GraphicExt::addedResources.clear();
 		firstTimeForPlaying = true;
 	}
 	return returnStuff;
@@ -322,16 +265,14 @@ renderBg RenderBg = NULL;
 
 int __fastcall OnRenderBg(DWORD* pThis, DWORD edx)
 {
-	
 	int result = RenderBg(pThis);
 
-	if (testRes != NULL)
+	if (!O2GraphicExt::addedResources.empty())
 	{
-		RenderData(testRes->data, 0);
-	}
-	if (test2Res != NULL)
-	{
-		RenderData(test2Res->data, 0);
+		for (int i = 0; i < O2GraphicExt::addedResources.size(); i++)
+		{
+			RenderData(O2GraphicExt::addedResources[i]->data, 0);
+		}
 	}
 
 	return result;

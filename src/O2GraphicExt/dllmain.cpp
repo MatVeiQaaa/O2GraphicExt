@@ -3,6 +3,7 @@
 // Windows Header Files
 #include <windows.h>
 #include <assert.h>
+#include <algorithm>
 #include "helpers.hpp"
 #include "O2GraphicExt.hpp"
 
@@ -24,6 +25,39 @@ DWORD WINAPI mainThread(HMODULE hModule)
     O2GraphicExt::exit();
     FreeLibraryAndExitThread(hModule, 0);
     return 0;
+}
+
+extern "C" {
+    __declspec(dllexport) bool addResource(char* name) {
+
+        O2GraphicExt::addResourcesOutside.push_back(name);
+        return true;
+    }
+
+    __declspec(dllexport) bool removeResource(char* name) {
+
+        for (int i = 0; i < O2GraphicExt::addedResources.size(); i++)
+        {
+            if (strncmp(name, O2GraphicExt::addedResources[i]->data->frame->name, strlen(name)) == 0)
+            {
+                O2GraphicExt::addedResources.erase(O2GraphicExt::addedResources.begin() + i);
+                return true;
+            }
+        }
+        return false;
+    }
+
+    __declspec(dllexport) Resource* getResource(char* name) {
+
+        for (int i = 0; i < O2GraphicExt::addedResources.size(); i++)
+        {
+            if (strncmp(name, O2GraphicExt::addedResources[i]->data->frame->name, strlen(name)) == 0)
+            {
+                return O2GraphicExt::addedResources[i];
+            }
+        }
+        return nullptr;
+    }
 }
 
 BOOL APIENTRY DllMain(HMODULE hModule,
