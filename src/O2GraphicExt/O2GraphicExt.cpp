@@ -9,7 +9,6 @@
 #include "helpers.hpp"
 
 #include "minhook/include/MinHook.h"
-#include "sigmatch/include/sigmatch/sigmatch.hpp"
 #include "json/single_include/nlohmann/json.hpp"
 
 #if defined _M_X64
@@ -28,81 +27,48 @@ uintptr_t hOtwo = NULL;
 
 int* previousState = NULL;
 int* currentState = NULL;
+short* MessageBoxFunction = NULL;
+char* MessageBoxText = NULL;
 
 std::vector<std::string> addResources;
 
-typedef uintptr_t(__thiscall* sub_4690)(DWORD* pThis, DWORD arg1, char* resName, DWORD arg3, DWORD arg4);
+typedef bool(__thiscall* sub_4690)(DWORD* pThis, DWORD arg1, char* resName, DWORD arg3, DWORD arg4);
 sub_4690 Sub_4690 = NULL;
 
-uintptr_t __fastcall OnSub_4690(DWORD* pThis, DWORD edx, DWORD arg1, char* resName, DWORD arg3, DWORD arg4)
+bool __fastcall OnSub_4690(DWORD* pThis, DWORD edx, DWORD arg1, char* resName, DWORD arg3, DWORD arg4)
 {
 	for (int i = 0; i < addResources.size(); i++)
 	{
 		if (strncmp(resName, addResources[i].c_str(), addResources[i].size()) == 0)
 		{
 			arg4 = 0; // band-aid to fix 50% crash chance on resource init. I have no idea what arg4 means, or what this function does exactly.
+			if (!Sub_4690(pThis, arg1, resName, arg3, arg4))
+			{
+				*MessageBoxFunction = 0;
+				std::string message = std::string(resName) + " missing from Playing.opi";
+				strcpy(MessageBoxText, message.c_str());
+				return false;
+			}
 			break;
 		}
 	}
 	return Sub_4690(pThis, arg1, resName, arg3, arg4);
 }
 
-typedef void(__thiscall* scaleOjt)(OJT* ojt, float scale);
-scaleOjt ScaleOjt = NULL;
-
-typedef uintptr_t(__thiscall* loadSceneElement)(DWORD* buffer, DWORD idc, ResDetails* resDetails);
-loadSceneElement LoadSceneElement = NULL;
-
-int comboCentrePoint = 72;
-int comboDigitWidth = 44;
-int comboDigitsSpacing = 0;
-bool comboSmallNumberCorrections = true;
-Resource* testRes;
-Resource* test2Res;
-uintptr_t __fastcall OnLoadSceneElement(DWORD* buffer, DWORD edx, DWORD idc, ResDetails* resDetails)
+void GenerateElementConfig(Resource* resource, ResDetails* resDetails)
 {
-	uintptr_t result = LoadSceneElement(buffer, idc, resDetails);
-	Resource* resource = (Resource*)buffer;
-
-	using json = nlohmann::ordered_json;
-	std::ifstream cfgInFile;
-	std::ofstream cfgOutFile;
-	cfgInFile.open("O2GraphicExt.json");
-	bool generateConfigData = 0;
-	json config;
-	if (cfgInFile.peek() == std::ifstream::traits_type::eof() || !cfgInFile.is_open())
+	if (*currentState == 11 && resource->data->type == 3)
 	{
-		cfgInFile.close();
-		cfgOutFile.open("O2GraphicExt.json", std::ios_base::app);
-		json generateConfig; 
-		generateConfig["generateConfig"] = true;
-		cfgOutFile << std::setw(4) << generateConfig << std::endl;
-		cfgOutFile.close();
-	}
-
-	cfgInFile.open("O2GraphicExt.json");
-	config = json::parse(cfgInFile);
-	cfgInFile.close();
-
-	if (*previousState == 11 && config["generateConfig"] == true)
-	{
-		cfgOutFile.open("O2GraphicExt.json");
-		config["generateConfig"] = false;
-		cfgOutFile << std::setw(4) << config << std::endl;
-		cfgOutFile.close();
-	}
-
-	generateConfigData = config.at("generateConfig");
-
-	if (generateConfigData && *currentState == 11 && resource->data->type == 3)
-	{
+		using json = nlohmann::ordered_json;
+		std::ifstream cfgInFile;
+		std::ofstream cfgOutFile;
 		json element;
-		/*element[resDetails->name]["Position"] = 
+		/*element[resDetails->name]["Position"] =
 		{
 				{"X", resource->data->X},
 				{"Y", resource->data->Y}
 		};*/
-		
+
 		element[resDetails->name]["Scale"] =
 		{
 			{"X", resource->data->ojt->XScale},
@@ -130,27 +96,66 @@ uintptr_t __fastcall OnLoadSceneElement(DWORD* buffer, DWORD edx, DWORD idc, Res
 		cfgOutFile << std::setw(4) << finalJson << std::endl;
 		cfgOutFile.close();
 	}
+}
+
+typedef void(__thiscall* scaleOjt)(OJT* ojt, float scale);
+scaleOjt ScaleOjt = NULL;
+
+typedef uintptr_t(__thiscall* loadSceneElement)(DWORD* buffer, DWORD idc, ResDetails* resDetails);
+loadSceneElement LoadSceneElement = NULL;
+
+int comboCentrePoint = 72;
+int comboDigitWidth = 44;
+int comboDigitsSpacing = 0;
+bool comboSmallNumberCorrections = true;
+Resource* testRes;
+Resource* test2Res;
+uintptr_t __fastcall OnLoadSceneElement(DWORD* buffer, DWORD edx, DWORD idc, ResDetails* resDetails)
+{
+	uintptr_t result = LoadSceneElement(buffer, idc, resDetails);
+	Resource* resource = (Resource*)buffer;
+
+	using json = nlohmann::ordered_json;
+	std::ifstream cfgInFile;
+	cfgInFile.open("O2GraphicExt.json");
+	json config;
+	try {
+		config = json::parse(cfgInFile);
+	}
+	catch (...) {
+		config["addResources"] = std::vector<std::string>(NULL);
+		std::ofstream cfgOutFile;
+		cfgOutFile.open("O2GraphicExt.json");
+		cfgOutFile << std::setw(4) << config << std::endl;
+		cfgOutFile.close();
+	}
+	cfgInFile.close();
 	
-	if (!generateConfigData && *currentState == 11)
+	if (*currentState == 11)
 	{
 		//resource->data->X = config[resDetails->name]["Position"]["X"];
 		//resource->data->Y = config[resDetails->name]["Position"]["Y"];
-		if (resource->data->type == 3)
-		{
-			resource->data->ojt->XScale = config[resDetails->name]["Scale"]["X"];
-			resource->data->ojt->YScale = config[resDetails->name]["Scale"]["Y"];
-			resource->data->ojt->scaleAllRelative = config[resDetails->name]["Scale"]["Multiplier"];
-			ScaleOjt(resource->data->ojt, resource->data->ojt->scaleAllRelative);
+		try {
+			if (resource->data->type == 3)
+			{
+				resource->data->ojt->XScale = config[resDetails->name]["Scale"]["X"];
+				resource->data->ojt->YScale = config[resDetails->name]["Scale"]["Y"];
+				resource->data->ojt->scaleAllRelative = config[resDetails->name]["Scale"]["Multiplier"];
+				ScaleOjt(resource->data->ojt, resource->data->ojt->scaleAllRelative);
+			}
+			if (strncmp(resDetails->name, "Note_ComboNum", 13) == 0)
+			{
+				cfgInFile.open("O2GraphicExt.json");
+				config = json::parse(cfgInFile);
+				comboCentrePoint = config[resDetails->name]["Extra"]["CentrePoint"];
+				comboDigitWidth = config[resDetails->name]["Extra"]["DigitWidth"];
+				comboDigitsSpacing = config[resDetails->name]["Extra"]["DigitsSpacing"];
+				comboSmallNumberCorrections = config[resDetails->name]["Extra"]["SmallNumberCorrections"];
+				cfgInFile.close();
+			}
 		}
-		if (strncmp(resDetails->name, "Note_ComboNum", 13) == 0)
-		{
-			cfgInFile.open("O2GraphicExt.json");
-			config = json::parse(cfgInFile);
-			comboCentrePoint = config[resDetails->name]["Extra"]["CentrePoint"];
-			comboDigitWidth = config[resDetails->name]["Extra"]["DigitWidth"];
-			comboDigitsSpacing = config[resDetails->name]["Extra"]["DigitsSpacing"];
-			comboSmallNumberCorrections = config[resDetails->name]["Extra"]["SmallNumberCorrections"];
-			cfgInFile.close();
+		catch (...) {
+			GenerateElementConfig(resource, resDetails);
 		}
 	}
 
@@ -205,9 +210,18 @@ uintptr_t __fastcall OnLoadRes(DWORD* pThis, DWORD edx, ResDetails* resDetails, 
 		json config;
 		cfgInFile.open("O2GraphicExt.json");
 		config = json::parse(cfgInFile);
-		addResources = config["addResources"].get<std::vector<std::string>>();
-		addResources.insert(addResources.end(), O2GraphicExt::addResourcesOutside.begin(), O2GraphicExt::addResourcesOutside.end());
+		try {
+			addResources = config["addResources"].get<std::vector<std::string>>();
+		}
+		catch (...) {
+			config["addResources"] = std::vector<std::string>(NULL);
+			std::ofstream cfgOutFile;
+			cfgOutFile.open("O2GraphicExt.json");
+			cfgOutFile << std::setw(4) << config << std::endl;
+			cfgOutFile.close();
+		}
 		cfgInFile.close();
+		addResources.insert(addResources.end(), O2GraphicExt::addResourcesOutside.begin(), O2GraphicExt::addResourcesOutside.end());
 
 		for (int i = 0; i < addResources.size(); i++)
 		{
@@ -218,9 +232,6 @@ uintptr_t __fastcall OnLoadRes(DWORD* pThis, DWORD edx, ResDetails* resDetails, 
 			resource->data->currentFrame = 1;
 			resource->data->frameCount = 1;
 			O2GraphicExt::addedResources.push_back(resource);
-			std::stringstream sstream;
-			sstream << testDetails.name << ": " << std::hex << resource;
-			Logger(sstream.str());
 		}
 
 		firstTimeForPlaying = false;
@@ -280,13 +291,12 @@ int __fastcall OnRenderBg(DWORD* pThis, DWORD edx)
 
 int O2GraphicExt::init(HMODULE hModule)
 {
+#ifdef _DEBUG
 	Sleep(5000);
+#endif
 	hOtwo = (uintptr_t)GetModuleHandle("OTwo.exe");
 	MODULEINFO modOtwo;
 	GetModuleInformation(GetCurrentProcess(), (HMODULE)hOtwo, &modOtwo, sizeof(MODULEINFO));
-	using namespace sigmatch_literals;
-	sigmatch::this_process_target target;
-	sigmatch::search_context context = target.in_module("OTwo.exe");
 
 	LoadSceneElement = (loadSceneElement)((uintptr_t)hOtwo + 0x05B0C0);
 	LoadRes = (loadRes)((uintptr_t)hOtwo + 0x0303A0);
@@ -297,6 +307,8 @@ int O2GraphicExt::init(HMODULE hModule)
 	ScaleOjt = (scaleOjt)((uintptr_t)hOtwo + 0x108C0);
 	previousState = (int*)FollowPointers(hOtwo, { 0x1C8884, 0x4C });
 	currentState = (int*)FollowPointers(hOtwo, { 0x1C8884, 0x50 });
+	MessageBoxFunction = (short*)FollowPointers(hOtwo, { 0x1C8884, 0x5C });
+	MessageBoxText = (char*)FollowPointers(hOtwo, { 0x1C8884, 0x64 });
 
 	DrawCombo = (drawCombo)((uintptr_t)hOtwo + 0x028780);
 	DWORD curProtection = 0;

@@ -15,10 +15,12 @@ DWORD WINAPI mainThread(HMODULE hModule)
 
     while (true)
     {
+    #ifdef _DEBUG
         if (GetAsyncKeyState(VK_INSERT))
         {
             break;
         }
+    #endif
         Sleep(10);
     }
 
@@ -36,11 +38,11 @@ extern "C" {
 
     __declspec(dllexport) bool removeResource(char* name) {
 
-        for (int i = 0; i < O2GraphicExt::addedResources.size(); i++)
+        for (int i = 0; i < O2GraphicExt::addResourcesOutside.size(); i++)
         {
-            if (strncmp(name, O2GraphicExt::addedResources[i]->data->frame->name, strlen(name)) == 0)
+            if (O2GraphicExt::addResourcesOutside[i] == name)
             {
-                O2GraphicExt::addedResources.erase(O2GraphicExt::addedResources.begin() + i);
+                O2GraphicExt::addResourcesOutside.erase(O2GraphicExt::addResourcesOutside.begin() + i);
                 return true;
             }
         }
