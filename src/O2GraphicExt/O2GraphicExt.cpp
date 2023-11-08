@@ -271,6 +271,24 @@ int __fastcall OnInitPlayingScene(DWORD* pThis, DWORD edx, DWORD unk)
 typedef int(__thiscall* renderData)(Data* data, DWORD unk);
 renderData RenderData = NULL;
 
+typedef int(__thiscall* renderPlaying)(DWORD* pThis, DWORD arg1);
+renderPlaying RenderPlaying = NULL;
+
+int __fastcall OnRenderPlaying(DWORD* pThis, DWORD edx, DWORD arg1)
+{
+	int result = RenderPlaying(pThis, arg1);
+
+	if (!O2GraphicExt::addedResources.empty())
+	{
+		for (int i = 0; i < O2GraphicExt::addedResources.size(); i++)
+		{
+			RenderData(O2GraphicExt::addedResources[i]->data, 0);
+		}
+	}
+
+	return result;
+}
+
 typedef int(__thiscall* renderBg)(DWORD* pThis);
 renderBg RenderBg = NULL;
 
@@ -291,9 +309,6 @@ int __fastcall OnRenderBg(DWORD* pThis, DWORD edx)
 
 int O2GraphicExt::init(HMODULE hModule)
 {
-#ifdef _DEBUG
-	Sleep(5000);
-#endif
 	hOtwo = (uintptr_t)GetModuleHandle("OTwo.exe");
 	MODULEINFO modOtwo;
 	GetModuleInformation(GetCurrentProcess(), (HMODULE)hOtwo, &modOtwo, sizeof(MODULEINFO));
@@ -303,8 +318,11 @@ int O2GraphicExt::init(HMODULE hModule)
 	Sub_4690 = (sub_4690)((uintptr_t)hOtwo + 0x4690);
 	InitPlayingScene = (initPlayingScene)((uintptr_t)hOtwo + 0x024B60);
 	RenderBg = (renderBg)((uintptr_t)hOtwo + 0x027D50);
+	RenderPlaying = (renderPlaying)((uintptr_t)hOtwo + 0x027DD0);
 	RenderData = (renderData)((uintptr_t)hOtwo + 0x010B90);
 	ScaleOjt = (scaleOjt)((uintptr_t)hOtwo + 0x108C0);
+	uintptr_t* stateManager = (uintptr_t*)(hOtwo + 0x1C8884);
+	while (!*stateManager) Sleep(50); // wait for StateManager to initialize.
 	previousState = (int*)FollowPointers(hOtwo, { 0x1C8884, 0x4C });
 	currentState = (int*)FollowPointers(hOtwo, { 0x1C8884, 0x50 });
 	MessageBoxFunction = (short*)FollowPointers(hOtwo, { 0x1C8884, 0x5C });
@@ -344,9 +362,9 @@ int O2GraphicExt::init(HMODULE hModule)
 		return 1;
 	}
 
-	if (MH_CreateHookEx((LPVOID)RenderBg, &OnRenderBg, &RenderBg) != MH_OK)
+	if (MH_CreateHookEx((LPVOID)RenderPlaying, &OnRenderPlaying, &RenderPlaying) != MH_OK)
 	{
-		Logger("Couldn't hook RenderBg");
+		Logger("Couldn't hook PlayingLoop");
 		return 1;
 	}
 
