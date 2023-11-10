@@ -42,10 +42,14 @@ struct Data
 	OJT* ojt;
 	BYTE unk2[0x4];
 	short type; // 1 == ojs, 3 == ojt
-	short unk3;
+	short unk3; // Using it as "bool Looping" for my animation system, unknown what it is for the game.
 	int X;
 	int Y;
-	BYTE unk4[0x144];
+	BYTE unk4[0x120];
+	int animationDuration; // Default = 30.
+	int animationStart; // ?
+	int animationCutoff; // Using this to store animationDuration original value for my animation system.
+	BYTE unk5[0x18];
 	int currentFrame;
 	int frameCount;
 };

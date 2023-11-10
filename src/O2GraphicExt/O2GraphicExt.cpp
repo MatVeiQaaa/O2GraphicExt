@@ -5,6 +5,7 @@
 #include <thread>
 #include <psapi.h>
 #include <math.h>
+#include <chrono>
 
 #include "helpers.hpp"
 
@@ -231,6 +232,7 @@ uintptr_t __fastcall OnLoadRes(DWORD* pThis, DWORD edx, ResDetails* resDetails, 
 			Resource* resource = (Resource*)LoadRes(pThis, &testDetails, 0);
 			resource->data->currentFrame = 1;
 			resource->data->frameCount = 1;
+			resource->data->unk3 = 0;
 			O2GraphicExt::addedResources.push_back(resource);
 		}
 
@@ -247,26 +249,9 @@ uintptr_t __fastcall OnLoadRes(DWORD* pThis, DWORD edx, ResDetails* resDetails, 
 
 typedef int(__thiscall* initPlayingScene)(DWORD* pThis, DWORD unk);
 initPlayingScene InitPlayingScene = NULL;
-int __fastcall OnInitPlayingScene(DWORD* pThis, DWORD edx, DWORD unk)
-{
 
-	InitPlayingScene(pThis, unk);
-	ResDetails testDetails;
-	testDetails.idc = 0x1B500000;
-	strcpy(testDetails.name, "Test.ojs");
-	testRes = (Resource*)LoadRes(pThis, &testDetails, 0);
-	testRes->data->currentFrame = 1;
-	testRes->data->frameCount = 1;
-	strcpy(testDetails.name, "Test2.ojs");
-	test2Res = (Resource*)LoadRes(pThis, &testDetails, 0);
-	test2Res->data->currentFrame = 1;
-	test2Res->data->frameCount = 1;
-	std::stringstream sstream;
-	sstream << "testRes: " << std::hex << testRes << '\n'
-		<< "test2Res: " << test2Res;
-	Logger(sstream.str());
-	return 1;
-}
+typedef void(__thiscall* playDataAnimation)(Data* data, int playFor, int pauseFor, int arg3, int arg4);
+playDataAnimation PlayDataAnimation = NULL;
 
 typedef int(__thiscall* renderData)(Data* data, DWORD unk);
 renderData RenderData = NULL;
@@ -274,16 +259,47 @@ renderData RenderData = NULL;
 typedef int(__thiscall* renderPlaying)(DWORD* pThis, DWORD arg1);
 renderPlaying RenderPlaying = NULL;
 
+std::chrono::steady_clock::time_point time_last;
+double timeSinceLastAnim;
+
 int __fastcall OnRenderPlaying(DWORD* pThis, DWORD edx, DWORD arg1)
 {
 	int result = RenderPlaying(pThis, arg1);
 
-	if (!O2GraphicExt::addedResources.empty())
+	if (!reinterpret_cast<long long&>(time_last))
 	{
-		for (int i = 0; i < O2GraphicExt::addedResources.size(); i++)
+		time_last = std::chrono::steady_clock::now();
+	}
+	std::chrono::steady_clock::time_point time_now = std::chrono::steady_clock::now();
+	double delta;
+	timeSinceLastAnim += delta = std::chrono::duration_cast<std::chrono::microseconds>(time_now - time_last).count() / 1000000.0;
+	time_last = time_now;
+
+	if (O2GraphicExt::addedResources.empty()) return result;
+	for (int i = 0; i < O2GraphicExt::addedResources.size(); i++)
+	{
+		if (timeSinceLastAnim >= 0.016) // 60fps normalization.
 		{
-			RenderData(O2GraphicExt::addedResources[i]->data, 0);
+			if (!O2GraphicExt::addedResources[i]->data->unk3) {
+				RenderData(O2GraphicExt::addedResources[i]->data, 0);
+				continue;
+			}
+
+			if (O2GraphicExt::addedResources[i]->data->currentFrame && O2GraphicExt::addedResources[i]->data->currentFrame < O2GraphicExt::addedResources[i]->data->frameCount)
+			{
+				O2GraphicExt::addedResources[i]->data->currentFrame++;
+			}
+			else if (O2GraphicExt::addedResources[i]->data->animationDuration == 0)
+			{
+				O2GraphicExt::addedResources[i]->data->animationDuration = O2GraphicExt::addedResources[i]->data->animationCutoff;
+				O2GraphicExt::addedResources[i]->data->unk3 > 1 ? O2GraphicExt::addedResources[i]->data->currentFrame = 1 : O2GraphicExt::addedResources[i]->data->currentFrame = 0;
+			}
+			else O2GraphicExt::addedResources[i]->data->animationDuration--;
+
+			if (i == O2GraphicExt::addedResources.size() - 1) timeSinceLastAnim = 0;
 		}
+
+		RenderData(O2GraphicExt::addedResources[i]->data, 0);
 	}
 
 	return result;
@@ -317,6 +333,7 @@ int O2GraphicExt::init(HMODULE hModule)
 	LoadRes = (loadRes)((uintptr_t)hOtwo + 0x0303A0);
 	Sub_4690 = (sub_4690)((uintptr_t)hOtwo + 0x4690);
 	InitPlayingScene = (initPlayingScene)((uintptr_t)hOtwo + 0x024B60);
+	PlayDataAnimation = (playDataAnimation)((uintptr_t)hOtwo + 0x010DB0);
 	RenderBg = (renderBg)((uintptr_t)hOtwo + 0x027D50);
 	RenderPlaying = (renderPlaying)((uintptr_t)hOtwo + 0x027DD0);
 	RenderData = (renderData)((uintptr_t)hOtwo + 0x010B90);

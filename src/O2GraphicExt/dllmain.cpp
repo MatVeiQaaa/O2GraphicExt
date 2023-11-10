@@ -60,6 +60,22 @@ extern "C" {
         }
         return nullptr;
     }
+
+    __declspec(dllexport) bool playAnimation(char* name, short type, int frameCount, int pauseDuration) {
+
+        for (int i = 0; i < O2GraphicExt::addedResources.size(); i++)
+        {
+            if (strncmp(name, O2GraphicExt::addedResources[i]->data->frame->name, strlen(name)) == 0)
+            {
+                O2GraphicExt::addedResources[i]->data->currentFrame = 1;
+                O2GraphicExt::addedResources[i]->data->unk3 = type;
+                O2GraphicExt::addedResources[i]->data->frameCount = frameCount;
+                O2GraphicExt::addedResources[i]->data->animationDuration = O2GraphicExt::addedResources[i]->data->animationCutoff = pauseDuration;
+                return true;
+            }
+        }
+        return false;
+    }
 }
 
 BOOL APIENTRY DllMain(HMODULE hModule,
