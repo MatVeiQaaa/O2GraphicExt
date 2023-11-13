@@ -56,6 +56,43 @@ bool __fastcall OnSub_4690(DWORD* pThis, DWORD edx, DWORD arg1, char* resName, D
 	return Sub_4690(pThis, arg1, resName, arg3, arg4);
 }
 
+int* counterCoolX = nullptr;
+int* counterCoolY = nullptr;
+int* counterGoodX = nullptr;
+int* counterGoodY = nullptr;
+int* counterBadX = nullptr;
+int* counterBadY = nullptr;
+int* counterMissX = nullptr;
+int* counterMissY = nullptr;
+int* counterComboX = nullptr;
+int* counterComboY = nullptr;
+int* counterScoreX = nullptr;
+int* counterScoreY = nullptr;
+int* indicatorVol1X = nullptr;
+int* indicatorVol1Y = nullptr;
+int* indicatorVol2X = nullptr;
+int* indicatorVol2Y = nullptr;
+int* indicatorNoteX = nullptr;
+int* indicatorNoteY = nullptr;
+int* indicatorVisX = nullptr;
+int* indicatorVisY = nullptr;
+int* indicatorArrX = nullptr;
+int* indicatorArrY = nullptr;
+
+int comboCentrePoint = 72;
+int comboDigitWidth = 44;
+int comboDigitsSpacing = 0;
+bool comboSmallNumberCorrections = true;
+int* comboStartingY = nullptr;
+int* comboTargetY = nullptr;
+int8_t* comboIncrementY = nullptr;
+
+int8_t* comboTextIncrementX = nullptr;
+int8_t* comboTextIncrementY = nullptr;
+
+float* judgementInitialScale = nullptr;
+float* judgementScaleCompounding = nullptr;
+
 void GenerateElementConfig(Resource* resource, ResDetails* resDetails)
 {
 	if (*currentState == 11 && resource->data->type == 3)
@@ -64,6 +101,7 @@ void GenerateElementConfig(Resource* resource, ResDetails* resDetails)
 		std::ifstream cfgInFile;
 		std::ofstream cfgOutFile;
 		json element;
+
 		/*element[resDetails->name]["Position"] =
 		{
 				{"X", resource->data->X},
@@ -84,9 +122,94 @@ void GenerateElementConfig(Resource* resource, ResDetails* resDetails)
 				{"CentrePoint", 72},
 				{"DigitWidth", 44},
 				{"DigitsSpacing", 0},
-				{"SmallNumberCorrections", true}
+				{"SmallNumberCorrections", true},
+				{"StartingYPosition", *comboStartingY},
+				{"TargetYPosition", *comboTargetY},
+				{"IncrementY", *comboIncrementY},
+				{"TextIncrementX", *comboTextIncrementX},
+				{"TextIncrementY", *comboTextIncrementY}
 			};
 		}
+		if (strncmp(resDetails->name, "Note_Cool", 9) == 0)
+		{
+			element[resDetails->name]["Extra"] =
+			{
+				{"InitialScale", *judgementInitialScale},
+				{"ScaleMultiplyPerFrame", *judgementScaleCompounding}
+			};
+		}
+
+		json finalJson;
+		cfgInFile.open("O2GraphicExt.json");
+		finalJson = json::parse(cfgInFile);
+		finalJson.merge_patch(element);
+		cfgInFile.close();
+		cfgOutFile.open("O2GraphicExt.json");
+		cfgOutFile << std::setw(4) << finalJson << std::endl;
+		cfgOutFile.close();
+	}
+	else if (strncmp(resDetails->name, "Playing_BG", 10) == 0) // Using this for misc. options loading, as its the first element to load.
+	{
+		using json = nlohmann::ordered_json;
+		std::ifstream cfgInFile;
+		std::ofstream cfgOutFile;
+		json element;
+
+		element["Miscellaneous"]["Counters"]["Cool"] =
+		{
+			{"X", *counterCoolX},
+			{"Y", *counterCoolY}
+		};
+		element["Miscellaneous"]["Counters"]["Good"] =
+		{
+			{"X", *counterGoodX},
+			{"Y", *counterGoodY}
+		};
+		element["Miscellaneous"]["Counters"]["Bad"] =
+		{
+			{"X", *counterBadX},
+			{"Y", *counterBadY}
+		};
+		element["Miscellaneous"]["Counters"]["Miss"] =
+		{
+			{"X", *counterMissX},
+			{"Y", *counterMissY}
+		};
+		element["Miscellaneous"]["Counters"]["Combo"] =
+		{
+			{"X", *counterComboX},
+			{"Y", *counterComboY}
+		};
+		element["Miscellaneous"]["Counters"]["Score"] =
+		{
+			{"X", *counterScoreX},
+			{"Y", *counterScoreY}
+		};
+		element["Miscellaneous"]["Indicators"]["Vol1"] =
+		{
+			{"X", *indicatorVol1X},
+			{"Y", *indicatorVol1Y}
+		};
+		element["Miscellaneous"]["Indicators"]["Vol2"] =
+		{
+			{"X", *indicatorVol2X},
+			{"Y", *indicatorVol2Y}
+		};
+		element["Miscellaneous"]["Indicators"]["NoteType"] =
+		{
+			{"X", *indicatorNoteX},
+			{"Y", *indicatorNoteY}
+		};
+		element["Miscellaneous"]["Indicators"]["RingVis"] =
+		{
+			{"X", *indicatorVisX},
+			{"Y", *indicatorVisY}
+		};
+		element["Miscellaneous"]["Indicators"]["RingArr"] =
+		{
+			{"X", *indicatorArrX},
+			{"Y", *indicatorArrY}
+		};
 
 		json finalJson;
 		cfgInFile.open("O2GraphicExt.json");
@@ -105,10 +228,6 @@ scaleOjt ScaleOjt = NULL;
 typedef uintptr_t(__thiscall* loadSceneElement)(DWORD* buffer, DWORD idc, ResDetails* resDetails);
 loadSceneElement LoadSceneElement = NULL;
 
-int comboCentrePoint = 72;
-int comboDigitWidth = 44;
-int comboDigitsSpacing = 0;
-bool comboSmallNumberCorrections = true;
 Resource* testRes;
 Resource* test2Res;
 uintptr_t __fastcall OnLoadSceneElement(DWORD* buffer, DWORD edx, DWORD idc, ResDetails* resDetails)
@@ -134,11 +253,36 @@ uintptr_t __fastcall OnLoadSceneElement(DWORD* buffer, DWORD edx, DWORD idc, Res
 	
 	if (*currentState == 11)
 	{
-		//resource->data->X = config[resDetails->name]["Position"]["X"];
-		//resource->data->Y = config[resDetails->name]["Position"]["Y"];
 		try {
+			if (strncmp(resDetails->name, "Playing_BG", 10) == 0)
+			{
+				*counterCoolX = config["Miscellaneous"]["Counters"]["Cool"]["X"];
+				*counterCoolY = config["Miscellaneous"]["Counters"]["Cool"]["Y"];
+				*counterGoodX = config["Miscellaneous"]["Counters"]["Good"]["X"];
+				*counterGoodY = config["Miscellaneous"]["Counters"]["Good"]["Y"];
+				*counterBadX = config["Miscellaneous"]["Counters"]["Bad"]["X"];
+				*counterBadY = config["Miscellaneous"]["Counters"]["Bad"]["Y"];
+				*counterMissX = config["Miscellaneous"]["Counters"]["Miss"]["X"];
+				*counterMissY = config["Miscellaneous"]["Counters"]["Miss"]["Y"];
+				*counterComboX = config["Miscellaneous"]["Counters"]["Combo"]["X"];
+				*counterComboY = config["Miscellaneous"]["Counters"]["Combo"]["Y"];
+				*counterScoreX = config["Miscellaneous"]["Counters"]["Score"]["X"];
+				*counterScoreY = config["Miscellaneous"]["Counters"]["Score"]["Y"];
+				*indicatorVol1X = config["Miscellaneous"]["Indicators"]["Vol1"]["X"];
+				*indicatorVol1Y = config["Miscellaneous"]["Indicators"]["Vol1"]["Y"];
+				*indicatorVol2X = config["Miscellaneous"]["Indicators"]["Vol2"]["X"];
+				*indicatorVol2Y = config["Miscellaneous"]["Indicators"]["Vol2"]["Y"];
+				*indicatorNoteX = config["Miscellaneous"]["Indicators"]["NoteType"]["X"];
+				*indicatorNoteY = config["Miscellaneous"]["Indicators"]["NoteType"]["Y"];
+				*indicatorVisX = config["Miscellaneous"]["Indicators"]["RingVis"]["X"];
+				*indicatorVisY = config["Miscellaneous"]["Indicators"]["RingVis"]["Y"];
+				*indicatorArrX = config["Miscellaneous"]["Indicators"]["RingArr"]["X"];
+				*indicatorArrY = config["Miscellaneous"]["Indicators"]["RingArr"]["Y"];
+			}
 			if (resource->data->type == 3)
 			{
+				/*resource->data->X = config[resDetails->name]["Position"]["X"];
+				resource->data->Y = config[resDetails->name]["Position"]["Y"];*/
 				resource->data->ojt->XScale = config[resDetails->name]["Scale"]["X"];
 				resource->data->ojt->YScale = config[resDetails->name]["Scale"]["Y"];
 				resource->data->ojt->scaleAllRelative = config[resDetails->name]["Scale"]["Multiplier"];
@@ -146,13 +290,20 @@ uintptr_t __fastcall OnLoadSceneElement(DWORD* buffer, DWORD edx, DWORD idc, Res
 			}
 			if (strncmp(resDetails->name, "Note_ComboNum", 13) == 0)
 			{
-				cfgInFile.open("O2GraphicExt.json");
-				config = json::parse(cfgInFile);
 				comboCentrePoint = config[resDetails->name]["Extra"]["CentrePoint"];
 				comboDigitWidth = config[resDetails->name]["Extra"]["DigitWidth"];
 				comboDigitsSpacing = config[resDetails->name]["Extra"]["DigitsSpacing"];
 				comboSmallNumberCorrections = config[resDetails->name]["Extra"]["SmallNumberCorrections"];
-				cfgInFile.close();
+				*comboStartingY = config[resDetails->name]["Extra"]["StartingYPosition"];
+				*comboTargetY = config[resDetails->name]["Extra"]["TargetYPosition"];
+				*comboIncrementY = config[resDetails->name]["Extra"]["IncrementY"];
+				*comboTextIncrementX = config[resDetails->name]["Extra"]["TextIncrementX"];
+				*comboTextIncrementY = config[resDetails->name]["Extra"]["TextIncrementY"]; // Combo text animation stops when combo's TargetYPosition reached.
+			}
+			if (strncmp(resDetails->name, "Note_Cool", 9) == 0)
+			{
+				*judgementInitialScale = config[resDetails->name]["Extra"]["InitialScale"];
+				*judgementScaleCompounding = config[resDetails->name]["Extra"]["ScaleMultiplyPerFrame"];
 			}
 		}
 		catch (...) {
@@ -338,6 +489,39 @@ int O2GraphicExt::init(HMODULE hModule)
 	RenderPlaying = (renderPlaying)((uintptr_t)hOtwo + 0x027DD0);
 	RenderData = (renderData)((uintptr_t)hOtwo + 0x010B90);
 	ScaleOjt = (scaleOjt)((uintptr_t)hOtwo + 0x108C0);
+	DrawCombo = (drawCombo)((uintptr_t)hOtwo + 0x028780);
+
+	counterCoolX = (int*)((uintptr_t)hOtwo + 0x237EE);
+	counterCoolY = (int*)((uintptr_t)hOtwo + 0x237E2);
+	counterGoodX = (int*)((uintptr_t)hOtwo + 0x23816);
+	counterGoodY = (int*)((uintptr_t)hOtwo + 0x2380B);
+	counterBadX = (int*)((uintptr_t)hOtwo + 0x23834);
+	counterBadY = (int*)((uintptr_t)hOtwo + 0x2382F);
+	counterMissX = (int*)((uintptr_t)hOtwo + 0x23850);
+	counterMissY = (int*)((uintptr_t)hOtwo + 0x23845);
+	counterComboX = (int*)((uintptr_t)hOtwo + 0x23875);
+	counterComboY = (int*)((uintptr_t)hOtwo + 0x23870);
+	counterScoreX = (int*)((uintptr_t)hOtwo + 0x2378C);
+	counterScoreY = (int*)((uintptr_t)hOtwo + 0x23787);
+	indicatorVol1X = (int*)((uintptr_t)hOtwo + 0x23AC5);
+	indicatorVol1Y = (int*)((uintptr_t)hOtwo + 0x23AB4);
+	indicatorVol2X = (int*)((uintptr_t)hOtwo + 0x23B17);
+	indicatorVol2Y = (int*)((uintptr_t)hOtwo + 0x23B06);
+	indicatorNoteX = (int*)((uintptr_t)hOtwo + 0x7D22D);
+	indicatorNoteY = (int*)((uintptr_t)hOtwo + 0x7D228);
+	indicatorVisX = (int*)((uintptr_t)hOtwo + 0x241BB);
+	indicatorVisY = (int*)((uintptr_t)hOtwo + 0x241B2);
+	indicatorArrX = (int*)((uintptr_t)hOtwo + 0x241D3);
+	indicatorArrY = (int*)((uintptr_t)hOtwo + 0x241CA);
+
+	comboStartingY = (int*)((uintptr_t)hOtwo + 0x23379);
+	comboTargetY = (int*)((uintptr_t)hOtwo + 0x27F18);
+	comboIncrementY = (int8_t*)((uintptr_t)hOtwo + 0x27F3D);
+	comboTextIncrementX = (int8_t*)((uintptr_t)hOtwo + 0x27F25);
+	comboTextIncrementY = (int8_t*)((uintptr_t)hOtwo + 0x27F23);
+	judgementInitialScale = (float*)((uintptr_t)hOtwo + 0x23348);
+	judgementScaleCompounding = (float*)((uintptr_t)hOtwo + 0x27F83);
+
 	uintptr_t* stateManager = (uintptr_t*)(hOtwo + 0x1C8884);
 	while (!*stateManager) Sleep(50); // wait for StateManager to initialize.
 	previousState = (int*)FollowPointers(hOtwo, { 0x1C8884, 0x4C });
@@ -345,9 +529,14 @@ int O2GraphicExt::init(HMODULE hModule)
 	MessageBoxFunction = (short*)FollowPointers(hOtwo, { 0x1C8884, 0x5C });
 	MessageBoxText = (char*)FollowPointers(hOtwo, { 0x1C8884, 0x64 });
 
-	DrawCombo = (drawCombo)((uintptr_t)hOtwo + 0x028780);
 	DWORD curProtection = 0;
 	BOOL hResult = VirtualProtect((void*)(hOtwo + 0x2886A), 160, PAGE_EXECUTE_READWRITE, &curProtection);
+	hResult = VirtualProtect((void*)(hOtwo + 0x23348), 0x40, PAGE_EXECUTE_READWRITE, &curProtection);
+	hResult = VirtualProtect((void*)(hOtwo + 0x27F18), 0x80, PAGE_EXECUTE_READWRITE, &curProtection);
+	hResult = VirtualProtect((void*)(hOtwo + 0x23782), 0x100, PAGE_EXECUTE_READWRITE, &curProtection);
+	hResult = VirtualProtect((void*)(hOtwo + 0x23AB4), 0x100, PAGE_EXECUTE_READWRITE, &curProtection);
+	hResult = VirtualProtect((void*)(hOtwo + 0x241B2), 0x40, PAGE_EXECUTE_READWRITE, &curProtection);
+	hResult = VirtualProtect((void*)(hOtwo + 0x7D228), 0x10, PAGE_EXECUTE_READWRITE, &curProtection);
 
 	if (MH_Initialize() != MH_OK)
 	{
