@@ -34,7 +34,7 @@ char* MessageBoxText = NULL;
 std::vector<std::string> addResources;
 
 typedef bool(__thiscall* sub_4690)(DWORD* pThis, DWORD arg1, char* resName, DWORD arg3, DWORD arg4);
-sub_4690 Sub_4690 = NULL;
+sub_4690 Sub_4690 = NULL; // Called from LoadSceneRes.
 
 bool __fastcall OnSub_4690(DWORD* pThis, DWORD edx, DWORD arg1, char* resName, DWORD arg3, DWORD arg4)
 {
@@ -226,7 +226,7 @@ typedef void(__thiscall* scaleOjt)(OJT* ojt, float scale);
 scaleOjt ScaleOjt = NULL;
 
 typedef uintptr_t(__thiscall* loadSceneElement)(DWORD* buffer, DWORD idc, ResDetails* resDetails);
-loadSceneElement LoadSceneElement = NULL;
+loadSceneElement LoadSceneElement = NULL; // Called from LoadRes.
 
 Resource* testRes;
 Resource* test2Res;
@@ -315,7 +315,7 @@ uintptr_t __fastcall OnLoadSceneElement(DWORD* buffer, DWORD edx, DWORD idc, Res
 }
 
 typedef int(__thiscall* drawCombo)(DWORD* pThis, int combo, int x, int y);
-drawCombo DrawCombo = NULL;
+drawCombo DrawCombo = NULL; // Called from judgement animation function.
 
 int __fastcall OnDrawCombo(DWORD* pThis, DWORD edx, int combo, int x, int y)
 {
@@ -348,7 +348,7 @@ int __fastcall OnDrawCombo(DWORD* pThis, DWORD edx, int combo, int x, int y)
 }
 
 typedef uintptr_t(__thiscall* loadRes)(DWORD* pThis, ResDetails* resDetails, DWORD* set);
-loadRes LoadRes = NULL;
+loadRes LoadRes = NULL; // Called from various scene loading functions.
 
 //Resource* testRes;
 bool firstTimeForPlaying = true;
@@ -398,8 +398,119 @@ uintptr_t __fastcall OnLoadRes(DWORD* pThis, DWORD edx, ResDetails* resDetails, 
 	return returnStuff;
 }
 
-typedef int(__thiscall* initPlayingScene)(DWORD* pThis, DWORD unk);
+typedef int(__thiscall* initPlayingSceneAdditional)(DWORD* pThis, DWORD unk);
+initPlayingSceneAdditional InitPlayingSceneAdditional = NULL;
+
+typedef void(__thiscall* initPlayingScene)(DWORD* pThis, DWORD unk1, DWORD unk2);
 initPlayingScene InitPlayingScene = NULL;
+
+int* playingRectHeight = nullptr;
+int* noteplainRectWidth = nullptr;
+int* noteplainRectHeight = nullptr;
+int* shortNoteOffset = nullptr;
+int* lnBodyOffset = nullptr;
+int* lnTailOffset = nullptr;
+int* guideLineOffset = nullptr;
+int* measureLineOffset = nullptr;
+int* lnHeadLimit = nullptr;
+int* lnBodyLimit = nullptr;
+int* noteRenderCutoff = nullptr;
+int* unkHitpos1 = nullptr;
+int* unkHitpos2 = nullptr;
+int* unkHitpos3 = nullptr;
+BYTE* noteThickness = nullptr;
+
+int hitPosition = 480;
+std::vector<int*> effectOffset = { nullptr, nullptr, nullptr, nullptr, nullptr, nullptr, nullptr };
+std::vector<int*> noteOffset = { nullptr, nullptr, nullptr, nullptr, nullptr, nullptr, nullptr };
+std::vector<int> laneWidth;
+std::vector<int> noteWidth;
+int laneSpacing = 0;
+bool lnTail = true;
+
+void __fastcall OnInitPlayingScene(DWORD* pThis, DWORD edx, DWORD unk1, DWORD unk2)
+{
+	std::ifstream cfgInFile;
+	using json = nlohmann::ordered_json;
+	json config;
+	cfgInFile.open("O2GraphicExt.json");
+	config = json::parse(cfgInFile);
+	try {
+		hitPosition = config["Noteplain"]["HitPosition"];
+		laneWidth = config["Noteplain"]["LaneWidth"].get<std::vector<int>>();
+		laneSpacing = config["Noteplain"]["LaneSpacing"];
+		*noteThickness = config["Noteplain"]["ExtraNoteThickness"];
+		lnTail = config["Noteplain"]["ShowLNTail"];
+	}
+	catch (...) {
+		json element;
+		for (int i = 0; i < 7; i++)
+		{
+			if (laneWidth.size() < 7) laneWidth.push_back(0);
+			if (i == 6) {
+				laneWidth[i] = *noteplainRectWidth - *noteOffset[i];
+				break;
+			}
+			laneWidth[i] = *noteOffset[i + 1] - *noteOffset[i];
+		}
+		element["Noteplain"]["HitPosition"] = hitPosition;
+		element["Noteplain"]["LaneWidth"] = laneWidth;
+		element["Noteplain"]["LaneSpacing"] = laneSpacing;
+		element["Noteplain"]["ExtraNoteThickness"] = *noteThickness;
+		element["Noteplain"]["ShowLNTail"] = lnTail;
+
+		config.merge_patch(element);
+		std::ofstream cfgOutFile;
+		cfgOutFile.open("O2GraphicExt.json");
+		cfgOutFile << std::setw(4) << config << std::endl;
+		cfgOutFile.close();
+	}
+	cfgInFile.close();
+
+	*noteplainRectHeight = *shortNoteOffset = *lnBodyOffset = *lnTailOffset =
+	*guideLineOffset = *measureLineOffset = *lnHeadLimit = *lnBodyLimit = *noteRenderCutoff =
+	*unkHitpos1 = *unkHitpos2 = *unkHitpos3 = hitPosition;
+
+	if (hitPosition > 512) *playingRectHeight = hitPosition;
+
+	std::vector<int> originalNoteWidth = { 28, 22, 28, 32, 28, 22, 28 };
+	int totalWidth = 5;
+	for (int i = 0; i < 7; i++)
+	{
+		if (noteWidth.size() < 7) noteWidth.push_back(0);
+		noteWidth[i] = laneWidth[i] - originalNoteWidth[i];
+		if (i == 0)
+		{
+			*effectOffset[i] = 0 + (noteWidth[i] / 2);
+			*noteOffset[i] = 5;
+			totalWidth += laneWidth[i];
+			continue;
+		}
+		*effectOffset[i] = *effectOffset[i - 1] + laneWidth[i - 1] + laneSpacing;
+		*noteOffset[i] = *noteOffset[i - 1] + laneWidth[i - 1] + laneSpacing;
+		totalWidth += laneWidth[i] + laneSpacing;
+	}
+	*noteplainRectWidth = totalWidth;
+
+	return InitPlayingScene(pThis, unk1, unk2);
+}
+
+typedef void(__thiscall* renderNote)(DWORD* pThis, DWORD typePair, DWORD arg2, DWORD pos);
+renderNote RenderNote = NULL; // Called from GameplayEvent.
+
+void __fastcall OnRenderNote(DWORD* pThis, DWORD edx, DWORD typePair, DWORD arg2, DWORD pos)
+{
+	if (!lnTail && typePair == 0x03000001) return;
+	return RenderNote(pThis, typePair, arg2, pos);
+}
+
+typedef void(__thiscall* setNoteParams)(DWORD* pThis, DWORD arg1, DWORD columnIdx, DWORD arg3, DWORD arg4, DWORD arg5, DWORD arg6, DWORD noteType, DWORD widthOffset, DWORD heightOffset);
+setNoteParams SetNoteParams = NULL; // Called from RenderNote.
+
+void __fastcall OnSetNoteParams(DWORD* pThis, DWORD edx, DWORD arg1, DWORD columnIdx, DWORD arg3, DWORD arg4, DWORD arg5, DWORD arg6, DWORD noteType, DWORD widthOffset, DWORD heightOffset)
+{
+	return SetNoteParams(pThis, arg1, columnIdx, arg3, arg4, arg5, arg6, noteType, noteWidth[columnIdx], heightOffset);
+}
 
 typedef void(__thiscall* playDataAnimation)(Data* data, int playFor, int pauseFor, int arg3, int arg4);
 playDataAnimation PlayDataAnimation = NULL;
@@ -483,13 +594,46 @@ int O2GraphicExt::init(HMODULE hModule)
 	LoadSceneElement = (loadSceneElement)((uintptr_t)hOtwo + 0x05B0C0);
 	LoadRes = (loadRes)((uintptr_t)hOtwo + 0x0303A0);
 	Sub_4690 = (sub_4690)((uintptr_t)hOtwo + 0x4690);
-	InitPlayingScene = (initPlayingScene)((uintptr_t)hOtwo + 0x024B60);
+	InitPlayingSceneAdditional = (initPlayingSceneAdditional)((uintptr_t)hOtwo + 0x024B60);
+	InitPlayingScene = (initPlayingScene)((uintptr_t)hOtwo + 0x03B870);
+	RenderNote = (renderNote)((uintptr_t)hOtwo + 0x07E9A0);
+	SetNoteParams = (setNoteParams)((uintptr_t)hOtwo + 0x07D590);
 	PlayDataAnimation = (playDataAnimation)((uintptr_t)hOtwo + 0x010DB0);
 	RenderBg = (renderBg)((uintptr_t)hOtwo + 0x027D50);
 	RenderPlaying = (renderPlaying)((uintptr_t)hOtwo + 0x027DD0);
 	RenderData = (renderData)((uintptr_t)hOtwo + 0x010B90);
 	ScaleOjt = (scaleOjt)((uintptr_t)hOtwo + 0x108C0);
 	DrawCombo = (drawCombo)((uintptr_t)hOtwo + 0x028780);
+
+	playingRectHeight = (int*)((uintptr_t)hOtwo + 0x0DD03);
+	noteplainRectWidth = (int*)((uintptr_t)hOtwo + 0x233E8);
+	noteplainRectHeight = (int*)((uintptr_t)hOtwo + 0x233D1);
+	shortNoteOffset = (int*)((uintptr_t)hOtwo + 0x7E33A);
+	guideLineOffset = (int*)((uintptr_t)hOtwo + 0x7E3B3);
+	measureLineOffset = (int*)((uintptr_t)hOtwo + 0x7E3C7);
+	lnHeadLimit = (int*)((uintptr_t)hOtwo + 0x7E3D8);
+	lnBodyLimit = (int*)((uintptr_t)hOtwo + 0x7E3F7);
+	lnBodyOffset = (int*)((uintptr_t)hOtwo + 0x7E435);
+	lnTailOffset = (int*)((uintptr_t)hOtwo + 0x7E467);
+	noteRenderCutoff = (int*)((uintptr_t)hOtwo + 0x7EA2D);
+	unkHitpos1 = (int*)((uintptr_t)hOtwo + 0x7E3DF);
+	unkHitpos2 = (int*)((uintptr_t)hOtwo + 0x7E401);
+	unkHitpos3 = (int*)((uintptr_t)hOtwo + 0x7E84E);
+	noteThickness = (BYTE*)((uintptr_t)hOtwo + 0x7EA58);
+	effectOffset[0] = (int*)((uintptr_t)hOtwo + 0x252EC);
+	effectOffset[1] = (int*)((uintptr_t)hOtwo + 0x252F4);
+	effectOffset[2] = (int*)((uintptr_t)hOtwo + 0x252FC);
+	effectOffset[3] = (int*)((uintptr_t)hOtwo + 0x2530A);
+	effectOffset[4] = (int*)((uintptr_t)hOtwo + 0x25314);
+	effectOffset[5] = (int*)((uintptr_t)hOtwo + 0x2531C);
+	effectOffset[6] = (int*)((uintptr_t)hOtwo + 0x25324);
+	noteOffset[0] = (int*)((uintptr_t)hOtwo + 0x7EDB9);
+	noteOffset[1] = (int*)((uintptr_t)hOtwo + 0x7EDC0);
+	noteOffset[2] = (int*)((uintptr_t)hOtwo + 0x7EDC7);
+	noteOffset[3] = (int*)((uintptr_t)hOtwo + 0x7EDCE);
+	noteOffset[4] = (int*)((uintptr_t)hOtwo + 0x7EDD5);
+	noteOffset[5] = (int*)((uintptr_t)hOtwo + 0x7EDDC);
+	noteOffset[6] = (int*)((uintptr_t)hOtwo + 0x7EDE3);
 
 	counterCoolX = (int*)((uintptr_t)hOtwo + 0x237EE);
 	counterCoolY = (int*)((uintptr_t)hOtwo + 0x237E2);
@@ -537,6 +681,15 @@ int O2GraphicExt::init(HMODULE hModule)
 	hResult = VirtualProtect((void*)(hOtwo + 0x23AB4), 0x100, PAGE_EXECUTE_READWRITE, &curProtection);
 	hResult = VirtualProtect((void*)(hOtwo + 0x241B2), 0x40, PAGE_EXECUTE_READWRITE, &curProtection);
 	hResult = VirtualProtect((void*)(hOtwo + 0x7D228), 0x10, PAGE_EXECUTE_READWRITE, &curProtection);
+	hResult = VirtualProtect((void*)(hOtwo + 0x233E8), 0x4, PAGE_EXECUTE_READWRITE, &curProtection);
+	hResult = VirtualProtect((void*)(hOtwo + 0x252EC), 0x100, PAGE_EXECUTE_READWRITE, &curProtection);
+	hResult = VirtualProtect((void*)(hOtwo + 0x7EA58), 0x1, PAGE_EXECUTE_READWRITE, &curProtection);
+	hResult = VirtualProtect((void*)(hOtwo + 0x7EDC0), 0x40, PAGE_EXECUTE_READWRITE, &curProtection);
+	hResult = VirtualProtect((void*)(hOtwo + 0x233D1), 0x4, PAGE_EXECUTE_READWRITE, &curProtection);
+	hResult = VirtualProtect((void*)(hOtwo + 0x7E33A), 0x140, PAGE_EXECUTE_READWRITE, &curProtection);
+	hResult = VirtualProtect((void*)(hOtwo + 0x7E84E), 0x4, PAGE_EXECUTE_READWRITE, &curProtection);
+	hResult = VirtualProtect((void*)(hOtwo + 0x7EA2D), 0x4, PAGE_EXECUTE_READWRITE, &curProtection); 
+	hResult = VirtualProtect((void*)(hOtwo + 0x0DD03), 0x4, PAGE_EXECUTE_READWRITE, &curProtection);
 
 	if (MH_Initialize() != MH_OK)
 	{
@@ -571,6 +724,24 @@ int O2GraphicExt::init(HMODULE hModule)
 	if (MH_CreateHookEx((LPVOID)RenderPlaying, &OnRenderPlaying, &RenderPlaying) != MH_OK)
 	{
 		Logger("Couldn't hook PlayingLoop");
+		return 1;
+	}
+
+	if (MH_CreateHookEx((LPVOID)InitPlayingScene, &OnInitPlayingScene, &InitPlayingScene) != MH_OK)
+	{
+		Logger("Couldn't hook InitPlayingScene");
+		return 1;
+	}
+	
+	if (MH_CreateHookEx((LPVOID)RenderNote, &OnRenderNote, &RenderNote) != MH_OK)
+	{
+		Logger("Couldn't hook RenderNote");
+		return 1;
+	}
+
+	if (MH_CreateHookEx((LPVOID)SetNoteParams, &OnSetNoteParams, &SetNoteParams) != MH_OK)
+	{
+		Logger("Couldn't hook SetNoteParams");
 		return 1;
 	}
 
