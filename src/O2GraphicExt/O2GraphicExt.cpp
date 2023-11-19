@@ -481,12 +481,12 @@ void __fastcall OnInitPlayingScene(DWORD* pThis, DWORD edx, DWORD unk1, DWORD un
 		noteWidth[i] = laneWidth[i] - originalNoteWidth[i];
 		if (i == 0)
 		{
-			*effectOffset[i] = 0 + (noteWidth[i] / 2);
+			*effectOffset[i] = 5 + (originalNoteWidth[i] + noteWidth[i]) / 2;
 			*noteOffset[i] = 5;
 			totalWidth += laneWidth[i];
 			continue;
 		}
-		*effectOffset[i] = *effectOffset[i - 1] + laneWidth[i - 1] + laneSpacing;
+		*effectOffset[i] = *effectOffset[i - 1] + (laneWidth[i - 1] + laneWidth[i]) / 2 + laneSpacing;
 		*noteOffset[i] = *noteOffset[i - 1] + laneWidth[i - 1] + laneSpacing;
 		totalWidth += laneWidth[i] + laneSpacing;
 	}
