@@ -497,10 +497,10 @@ void __fastcall OnInitPlayingScene(DWORD* pThis, DWORD edx, DWORD unk1, DWORD un
 
 typedef void(__thiscall* renderNote)(DWORD* pThis, DWORD typePair, DWORD arg2, DWORD pos);
 renderNote RenderNote = NULL; // Called from GameplayEvent.
-
+std::vector<DWORD> noteTypes;
 void __fastcall OnRenderNote(DWORD* pThis, DWORD edx, DWORD typePair, DWORD arg2, DWORD pos)
 {
-	if (!lnTail && typePair == 0x03000001) return;
+	if (!lnTail && ((char*)&typePair)[3] == 0x03) return;
 	return RenderNote(pThis, typePair, arg2, pos);
 }
 
