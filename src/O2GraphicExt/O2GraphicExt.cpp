@@ -30,6 +30,8 @@ int* previousState = NULL;
 int* currentState = NULL;
 short* MessageBoxFunction = NULL;
 char* MessageBoxText = NULL;
+int noteplainX = 21;
+int hitPosition = 480;
 
 std::vector<std::string> addResources;
 
@@ -79,7 +81,7 @@ int* indicatorVisY = nullptr;
 int* indicatorArrX = nullptr;
 int* indicatorArrY = nullptr;
 
-int comboCentrePoint = 72;
+int comboCentrePoint = 77;
 int comboDigitWidth = 44;
 int comboDigitsSpacing = 0;
 bool comboSmallNumberCorrections = true;
@@ -225,11 +227,40 @@ void GenerateElementConfig(Resource* resource, ResDetails* resDetails)
 typedef void(__thiscall* scaleOjt)(OJT* ojt, float scale);
 scaleOjt ScaleOjt = NULL;
 
+typedef void(__thiscall* setPosition)(Data* data, int posX, int posY);
+setPosition SetPosition = NULL;
+
+void __fastcall OnSetPosition(Data* data, DWORD edx, int posX, int posY)
+{
+	if (*currentState == 11)
+	{
+		DWORD* currentScenePtr = (DWORD*)FollowPointers(hOtwo, { 0x1C8884, 0x0D40 });
+		Resource* comboTextRes = (Resource*)FollowPointers(*currentScenePtr, { 0x598 + 0xF * 4, 0 });
+		Resource* judgeCoolRes = (Resource*)FollowPointers(*currentScenePtr, { 0x598 + 0xE * 4, 0 });
+		Resource* judgeGoodRes = (Resource*)FollowPointers(*currentScenePtr, { 0x598 + 0xD * 4, 0 });
+		Resource* judgeBadRes = (Resource*)FollowPointers(*currentScenePtr, { 0x598 + 0xC * 4, 0 });
+		Resource* judgeMissRes = (Resource*)FollowPointers(*currentScenePtr, { 0x598 + 0xB * 4, 0 });
+		if (comboTextRes && (data == comboTextRes->data || data == judgeCoolRes->data || 
+			data == judgeGoodRes->data || data == judgeBadRes->data || data == judgeMissRes->data))
+		{
+			posX = posX + noteplainX - 21;
+		}
+		if (data->frame && (strncmp(data->frame->name, "Note_Jam.ojs", 12) == 0 ||
+			strncmp(data->frame->name, "Life_gauge_back.ojs", 19) == 0 ||
+			strncmp(data->frame->name, "Life_gauge_bar.ojs", 18) == 0 || 
+			strncmp(data->frame->name, "Note_BG.ojs", 11) == 0
+			)
+			)
+		{
+			posX = posX + noteplainX - 21;
+		}
+	}
+	return SetPosition(data, posX, posY);
+}
+
 typedef uintptr_t(__thiscall* loadSceneElement)(DWORD* buffer, DWORD idc, ResDetails* resDetails);
 loadSceneElement LoadSceneElement = NULL; // Called from LoadRes.
 
-Resource* testRes;
-Resource* test2Res;
 uintptr_t __fastcall OnLoadSceneElement(DWORD* buffer, DWORD edx, DWORD idc, ResDetails* resDetails)
 {
 	uintptr_t result = LoadSceneElement(buffer, idc, resDetails);
@@ -314,6 +345,22 @@ uintptr_t __fastcall OnLoadSceneElement(DWORD* buffer, DWORD edx, DWORD idc, Res
 	return result;
 }
 
+typedef void(__thiscall* drawPill)(DWORD* pThis, int arg1, int x, int y);
+drawPill DrawPill = NULL;
+
+void __fastcall OnDrawPill(DWORD* pThis, DWORD edx, int arg1, int x, int y)
+{
+	return DrawPill(pThis, arg1, x + noteplainX - 21, y);
+}
+
+typedef int(__thiscall* drawJamCombo)(DWORD* pThis, int combo, int x, int y);
+drawJamCombo DrawJamCombo = NULL; // Called from judgement animation function.
+
+int __fastcall OnDrawJamCombo(DWORD* pThis, DWORD edx, int combo, int x, int y)
+{
+	return DrawJamCombo(pThis, combo, x + noteplainX - 21, y);
+}
+
 typedef int(__thiscall* drawCombo)(DWORD* pThis, int combo, int x, int y);
 drawCombo DrawCombo = NULL; // Called from judgement animation function.
 
@@ -327,7 +374,7 @@ int __fastcall OnDrawCombo(DWORD* pThis, DWORD edx, int combo, int x, int y)
 	char* twoCorrectionOpcode = (char*)(hOtwo + 0x2887F);
 	int gap = -comboDigitWidth - comboDigitsSpacing;
 	int digitsCount = combo > 9 ? (int)log10((double)combo) + 1 : 1;
-	x = comboCentrePoint + (comboDigitWidth + comboDigitsSpacing) / 2 * digitsCount;
+	x = noteplainX - 21 + comboCentrePoint + (comboDigitWidth + comboDigitsSpacing) / 2 * digitsCount;
 	*offsetTens = gap;
 	*offsetHundreds = gap * 2;
 	*offsetThousands = gap * 3;
@@ -420,7 +467,9 @@ int* unkHitpos2 = nullptr;
 int* unkHitpos3 = nullptr;
 BYTE* noteThickness = nullptr;
 
-int hitPosition = 480;
+bool showMeasurelines = true;
+bool showTargetBar = true;
+int* effectsY = nullptr;
 std::vector<int*> effectOffset = { nullptr, nullptr, nullptr, nullptr, nullptr, nullptr, nullptr };
 std::vector<int*> noteOffset = { nullptr, nullptr, nullptr, nullptr, nullptr, nullptr, nullptr };
 std::vector<int> laneWidth;
@@ -465,6 +514,23 @@ void __fastcall OnInitPlayingScene(DWORD* pThis, DWORD edx, DWORD unk1, DWORD un
 		cfgOutFile << std::setw(4) << config << std::endl;
 		cfgOutFile.close();
 	}
+	try {
+		noteplainX = config["Noteplain"]["ColumnStart"];
+		showMeasurelines = config["Noteplain"]["ShowMeasureLines"];
+		showTargetBar = config["Noteplain"]["ShowTargetBar"];
+	}
+	catch (...) {
+		json element;
+		element["Noteplain"]["ColumnStart"] = noteplainX;
+		element["Noteplain"]["ShowMeasureLines"] = showMeasurelines;
+		element["Noteplain"]["ShowTargetBar"] = showTargetBar;
+
+		config.merge_patch(element);
+		std::ofstream cfgOutFile;
+		cfgOutFile.open("O2GraphicExt.json");
+		cfgOutFile << std::setw(4) << config << std::endl;
+		cfgOutFile.close();
+	}
 	cfgInFile.close();
 
 	*noteplainRectHeight = *shortNoteOffset = *lnBodyOffset = *lnTailOffset =
@@ -472,6 +538,8 @@ void __fastcall OnInitPlayingScene(DWORD* pThis, DWORD edx, DWORD unk1, DWORD un
 	*unkHitpos1 = *unkHitpos2 = *unkHitpos3 = hitPosition;
 
 	if (hitPosition > 512) *playingRectHeight = hitPosition;
+
+	*effectsY = 0x1DB + hitPosition - 480;
 
 	std::vector<int> originalNoteWidth = { 28, 22, 28, 32, 28, 22, 28 };
 	int totalWidth = 5;
@@ -481,7 +549,7 @@ void __fastcall OnInitPlayingScene(DWORD* pThis, DWORD edx, DWORD unk1, DWORD un
 		noteWidth[i] = laneWidth[i] - originalNoteWidth[i];
 		if (i == 0)
 		{
-			*effectOffset[i] = 5 + (originalNoteWidth[i] + noteWidth[i]) / 2;
+			*effectOffset[i] = noteplainX - 21 + 5 + (originalNoteWidth[i] + noteWidth[i]) / 2;
 			*noteOffset[i] = 5;
 			totalWidth += laneWidth[i];
 			continue;
@@ -493,6 +561,26 @@ void __fastcall OnInitPlayingScene(DWORD* pThis, DWORD edx, DWORD unk1, DWORD un
 	*noteplainRectWidth = totalWidth;
 
 	return InitPlayingScene(pThis, unk1, unk2);
+}
+
+typedef void(__thiscall* setRectPosition)(DWORD* pThis, DWORD arg1, DWORD posX, DWORD posY, DWORD arg4);
+setRectPosition SetRectPosition = NULL; // Called from playingAni/setter.
+setRectPosition SetRectPositionHidden = NULL;
+
+void __fastcall OnSetRectPosition(DWORD* pThis, DWORD edx, DWORD arg1, DWORD posX, DWORD posY, DWORD arg4)
+{
+	if (*currentState == 11)
+	{
+		DWORD* rectanglesPtr = (DWORD*)FollowPointers(hOtwo, { 0x1C8884, 0x0D40, 0x620 });
+		DWORD* noteplainRect = (DWORD*)((*rectanglesPtr) + 0x1148);
+		DWORD* measurelineRect = (DWORD*)((*rectanglesPtr) + 0x1378);
+		if (!showMeasurelines && pThis == measurelineRect) return;
+		if (pThis == noteplainRect || pThis == measurelineRect)
+		{
+			posX = noteplainX;
+		}
+	}
+	return SetRectPosition(pThis, arg1, posX, posY, arg4);
 }
 
 typedef void(__thiscall* renderNote)(DWORD* pThis, DWORD typePair, DWORD arg2, DWORD pos);
@@ -517,6 +605,60 @@ playDataAnimation PlayDataAnimation = NULL;
 
 typedef int(__thiscall* renderData)(Data* data, DWORD unk);
 renderData RenderData = NULL;
+
+typedef void(__thiscall* renderDataSimple)(Data* data, int frameIdx, int posX, int posY, DWORD* arg3, DWORD* arg4);
+renderDataSimple RenderDataSimple = NULL;
+
+void __fastcall OnRenderDataSimple(Data* data, DWORD edx, int frameIdx, int posX, int posY, DWORD* arg3, DWORD* arg4)
+{
+	if (data->type != 1) return RenderDataSimple(data, frameIdx, posX, posY, arg3, arg4);
+
+	if (strncmp(data->frame->name, "Jam_gauge_bar.ojs", 17) == 0 ||
+		strncmp(data->frame->name, "Jam_gauge_text.ojs", 18) == 0)
+	{
+		posX = noteplainX - 21;
+	}
+	if (strncmp(data->frame->name, "KeydownImage.ojs", 16) == 0 || strncmp(data->frame->name, "Keyeffect.ojs", 13) == 0)
+	{
+		int originalNoteOffset = 5;
+		std::vector<int> originalNoteWidth = { 28, 22, 28, 32, 28, 22, 28 };
+		for (int i = 1; i < frameIdx; i++)
+		{
+			originalNoteOffset += originalNoteWidth[i - 1];
+		}
+		posX = noteplainX - 21 + *noteOffset[frameIdx - 1] - originalNoteOffset;
+	}
+	if (strncmp(data->frame->name, "Keyeffect.ojs", 16) == 0 || strncmp(data->frame->name, "KeydownImage.ojs", 16) == 0 ||
+		strncmp(data->frame->name, "Jam_gauge_bar.ojs", 17) == 0 || strncmp(data->frame->name, "Jam_gauge_text.ojs", 18) == 0)
+	{
+		posY = hitPosition - 480;
+	}
+
+	return RenderDataSimple(data, frameIdx, posX, posY, arg3, arg4);
+}
+
+typedef void(__thiscall* setEmbeddedPosition)(DWORD* pThis, DWORD posX, DWORD posY, DWORD arg3);
+setEmbeddedPosition SetEmbeddedPosition = NULL;
+
+void __fastcall OnSetEmbeddedPosition(DWORD* pThis, DWORD edx, DWORD posX, DWORD posY, DWORD arg3)
+{
+	if (*currentState == 11)
+	{
+		DWORD* currentStatePtr = (DWORD*)FollowPointers(hOtwo, { 0x1C8884, 0x0D40 });
+		DWORD* hitTargetRect = (DWORD*)((*currentStatePtr) + 0x318);
+		if (!showTargetBar && pThis == hitTargetRect) return;
+		if (pThis == hitTargetRect)
+		{
+			posX = noteplainX + 1;
+			posY = posY + hitPosition - 480;
+
+			Resource* noteBgRes = (Resource*)FollowPointers(hOtwo, { 0x1C8884, 0x0D40,  0x598 + 0x4, 0 });
+			noteBgRes->data->X = noteplainX - 21;
+			RenderData(noteBgRes->data, 0);
+		}
+	}
+	return SetEmbeddedPosition(pThis, posX, posY, arg3);
+}
 
 typedef int(__thiscall* renderPlaying)(DWORD* pThis, DWORD arg1);
 renderPlaying RenderPlaying = NULL;
@@ -574,13 +716,13 @@ int __fastcall OnRenderBg(DWORD* pThis, DWORD edx)
 {
 	int result = RenderBg(pThis);
 
-	if (!O2GraphicExt::addedResources.empty())
+	/*if (!O2GraphicExt::addedResources.empty())
 	{
 		for (int i = 0; i < O2GraphicExt::addedResources.size(); i++)
 		{
 			RenderData(O2GraphicExt::addedResources[i]->data, 0);
 		}
-	}
+	}*/
 
 	return result;
 }
@@ -596,14 +738,21 @@ int O2GraphicExt::init(HMODULE hModule)
 	Sub_4690 = (sub_4690)((uintptr_t)hOtwo + 0x4690);
 	InitPlayingSceneAdditional = (initPlayingSceneAdditional)((uintptr_t)hOtwo + 0x024B60);
 	InitPlayingScene = (initPlayingScene)((uintptr_t)hOtwo + 0x03B870);
+	SetEmbeddedPosition = (setEmbeddedPosition)((uintptr_t)hOtwo + 0x87280);
+	SetRectPositionHidden = (setRectPosition)((uintptr_t)hOtwo + 0x0E9E0);
+	SetRectPosition = (setRectPosition)((uintptr_t)hOtwo + 0x0EAC0);
 	RenderNote = (renderNote)((uintptr_t)hOtwo + 0x07E9A0);
 	SetNoteParams = (setNoteParams)((uintptr_t)hOtwo + 0x07D590);
 	PlayDataAnimation = (playDataAnimation)((uintptr_t)hOtwo + 0x010DB0);
 	RenderBg = (renderBg)((uintptr_t)hOtwo + 0x027D50);
 	RenderPlaying = (renderPlaying)((uintptr_t)hOtwo + 0x027DD0);
 	RenderData = (renderData)((uintptr_t)hOtwo + 0x010B90);
+	RenderDataSimple = (renderDataSimple)((uintptr_t)hOtwo + 0x11440);
 	ScaleOjt = (scaleOjt)((uintptr_t)hOtwo + 0x108C0);
+	SetPosition = (setPosition)((uintptr_t)hOtwo + 0x113A0);
 	DrawCombo = (drawCombo)((uintptr_t)hOtwo + 0x028780);
+	DrawJamCombo = (drawJamCombo)((uintptr_t)hOtwo + 0x05C500);
+	DrawPill = (drawPill)((uintptr_t)hOtwo + 0x5C6C0);
 
 	playingRectHeight = (int*)((uintptr_t)hOtwo + 0x0DD03);
 	noteplainRectWidth = (int*)((uintptr_t)hOtwo + 0x233E8);
@@ -620,6 +769,7 @@ int O2GraphicExt::init(HMODULE hModule)
 	unkHitpos2 = (int*)((uintptr_t)hOtwo + 0x7E401);
 	unkHitpos3 = (int*)((uintptr_t)hOtwo + 0x7E84E);
 	noteThickness = (BYTE*)((uintptr_t)hOtwo + 0x7EA58);
+	effectsY = (int*)((uintptr_t)hOtwo + 0x2557F);
 	effectOffset[0] = (int*)((uintptr_t)hOtwo + 0x252EC);
 	effectOffset[1] = (int*)((uintptr_t)hOtwo + 0x252F4);
 	effectOffset[2] = (int*)((uintptr_t)hOtwo + 0x252FC);
@@ -683,6 +833,7 @@ int O2GraphicExt::init(HMODULE hModule)
 	hResult = VirtualProtect((void*)(hOtwo + 0x7D228), 0x10, PAGE_EXECUTE_READWRITE, &curProtection);
 	hResult = VirtualProtect((void*)(hOtwo + 0x233E8), 0x4, PAGE_EXECUTE_READWRITE, &curProtection);
 	hResult = VirtualProtect((void*)(hOtwo + 0x252EC), 0x100, PAGE_EXECUTE_READWRITE, &curProtection);
+	hResult = VirtualProtect((void*)(hOtwo + 0x2557F), 0x4, PAGE_EXECUTE_READWRITE, &curProtection);
 	hResult = VirtualProtect((void*)(hOtwo + 0x7EA58), 0x1, PAGE_EXECUTE_READWRITE, &curProtection);
 	hResult = VirtualProtect((void*)(hOtwo + 0x7EDC0), 0x40, PAGE_EXECUTE_READWRITE, &curProtection);
 	hResult = VirtualProtect((void*)(hOtwo + 0x233D1), 0x4, PAGE_EXECUTE_READWRITE, &curProtection);
@@ -709,6 +860,24 @@ int O2GraphicExt::init(HMODULE hModule)
 		return 1;
 	}
 
+	if (MH_CreateHookEx((LPVOID)RenderDataSimple, &OnRenderDataSimple, &RenderDataSimple) != MH_OK)
+	{
+		Logger("Couldn't hook RenderDataSimple");
+		return 1;
+	}
+
+	if (MH_CreateHookEx((LPVOID)DrawPill, &OnDrawPill, &DrawPill) != MH_OK)
+	{
+		Logger("Couldn't hook DrawPill");
+		return 1;
+	}
+
+	if (MH_CreateHookEx((LPVOID)DrawJamCombo, &OnDrawJamCombo, &DrawJamCombo) != MH_OK)
+	{
+		Logger("Couldn't hook DrawJamCombo");
+		return 1;
+	}
+
 	if (MH_CreateHookEx((LPVOID)DrawCombo, &OnDrawCombo, &DrawCombo) != MH_OK)
 	{
 		Logger("Couldn't hook DrawCombo");
@@ -721,6 +890,12 @@ int O2GraphicExt::init(HMODULE hModule)
 		return 1;
 	}
 
+	if (MH_CreateHookEx((LPVOID)RenderBg, &OnRenderBg, &RenderBg) != MH_OK)
+	{
+		Logger("Couldn't hook RenderBg");
+		return 1;
+	}
+
 	if (MH_CreateHookEx((LPVOID)RenderPlaying, &OnRenderPlaying, &RenderPlaying) != MH_OK)
 	{
 		Logger("Couldn't hook PlayingLoop");
@@ -730,6 +905,30 @@ int O2GraphicExt::init(HMODULE hModule)
 	if (MH_CreateHookEx((LPVOID)InitPlayingScene, &OnInitPlayingScene, &InitPlayingScene) != MH_OK)
 	{
 		Logger("Couldn't hook InitPlayingScene");
+		return 1;
+	}
+
+	if (MH_CreateHookEx((LPVOID)SetPosition, &OnSetPosition, &SetPosition) != MH_OK)
+	{
+		Logger("Couldn't hook SetPosition");
+		return 1;
+	}
+
+	if (MH_CreateHookEx((LPVOID)SetEmbeddedPosition, &OnSetEmbeddedPosition, &SetEmbeddedPosition) != MH_OK)
+	{
+		Logger("Couldn't hook SetEmbeddedPosition");
+		return 1;
+	}
+
+	//if (MH_CreateHookEx((LPVOID)SetRectPositionHidden, &OnSetRectPositionHidden, &SetRectPositionHidden) != MH_OK)
+	//{
+	//	Logger("Couldn't hook SetRectPositionHidden");
+	//	return 1;
+	//}
+
+	if (MH_CreateHookEx((LPVOID)SetRectPosition, &OnSetRectPosition, &SetRectPosition) != MH_OK)
+	{
+		Logger("Couldn't hook SetRectPosition");
 		return 1;
 	}
 	
