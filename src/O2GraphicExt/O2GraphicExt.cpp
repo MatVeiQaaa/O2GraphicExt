@@ -26,6 +26,8 @@ inline MH_STATUS MH_CreateHookEx(LPVOID pTarget, LPVOID pDetour, T** ppOriginal)
 
 uintptr_t hOtwo = NULL;
 
+std::string configPath = "O2GraphicExt.json";
+
 int* previousState = NULL;
 int* currentState = NULL;
 short* MessageBoxFunction = NULL;
@@ -142,11 +144,11 @@ void GenerateElementConfig(Resource* resource, ResDetails* resDetails)
 		}
 
 		json finalJson;
-		cfgInFile.open("O2GraphicExt.json");
+		cfgInFile.open(configPath);
 		finalJson = json::parse(cfgInFile);
 		finalJson.merge_patch(element);
 		cfgInFile.close();
-		cfgOutFile.open("O2GraphicExt.json");
+		cfgOutFile.open(configPath);
 		cfgOutFile << std::setw(4) << finalJson << std::endl;
 		cfgOutFile.close();
 	}
@@ -214,11 +216,11 @@ void GenerateElementConfig(Resource* resource, ResDetails* resDetails)
 		};
 
 		json finalJson;
-		cfgInFile.open("O2GraphicExt.json");
+		cfgInFile.open(configPath);
 		finalJson = json::parse(cfgInFile);
 		finalJson.merge_patch(element);
 		cfgInFile.close();
-		cfgOutFile.open("O2GraphicExt.json");
+		cfgOutFile.open(configPath);
 		cfgOutFile << std::setw(4) << finalJson << std::endl;
 		cfgOutFile.close();
 	}
@@ -268,7 +270,7 @@ uintptr_t __fastcall OnLoadSceneElement(DWORD* buffer, DWORD edx, DWORD idc, Res
 
 	using json = nlohmann::ordered_json;
 	std::ifstream cfgInFile;
-	cfgInFile.open("O2GraphicExt.json");
+	cfgInFile.open(configPath);
 	json config;
 	try {
 		config = json::parse(cfgInFile);
@@ -276,7 +278,7 @@ uintptr_t __fastcall OnLoadSceneElement(DWORD* buffer, DWORD edx, DWORD idc, Res
 	catch (...) {
 		config["addResources"] = std::vector<std::string>(NULL);
 		std::ofstream cfgOutFile;
-		cfgOutFile.open("O2GraphicExt.json");
+		cfgOutFile.open(configPath);
 		cfgOutFile << std::setw(4) << config << std::endl;
 		cfgOutFile.close();
 	}
@@ -407,7 +409,7 @@ uintptr_t __fastcall OnLoadRes(DWORD* pThis, DWORD edx, ResDetails* resDetails, 
 		std::ifstream cfgInFile;
 		using json = nlohmann::ordered_json;
 		json config;
-		cfgInFile.open("O2GraphicExt.json");
+		cfgInFile.open(configPath);
 		config = json::parse(cfgInFile);
 		try {
 			addResources = config["addResources"].get<std::vector<std::string>>();
@@ -415,7 +417,7 @@ uintptr_t __fastcall OnLoadRes(DWORD* pThis, DWORD edx, ResDetails* resDetails, 
 		catch (...) {
 			config["addResources"] = std::vector<std::string>(NULL);
 			std::ofstream cfgOutFile;
-			cfgOutFile.open("O2GraphicExt.json");
+			cfgOutFile.open(configPath);
 			cfgOutFile << std::setw(4) << config << std::endl;
 			cfgOutFile.close();
 		}
@@ -484,6 +486,39 @@ void __fastcall OnInitPlayingScene(DWORD* pThis, DWORD edx, DWORD unk1, DWORD un
 	json config;
 	cfgInFile.open("O2GraphicExt.json");
 	config = json::parse(cfgInFile);
+	cfgInFile.close();
+	std::string currentSkin;
+	try {
+		currentSkin = config["SelectedSkin"].get<std::string>();
+	}
+	catch (...) {
+		json element;
+
+		element["SelectedSkin"] = "";
+
+		config.merge_patch(element);
+		std::ofstream cfgOutFile;
+		cfgOutFile.open("O2GraphicExt.json");
+		cfgOutFile << std::setw(4) << config << std::endl;
+		cfgOutFile.close();
+	}
+	char* playingOpiPath = (char*)FollowPointers(hOtwo, { 0x1C8884, 0x6E4 });
+	if (!currentSkin.empty())
+	{
+		configPath = "Skins/" + currentSkin + "/O2GraphicExt.json";
+		std::string customPlayingPath = "Skins\\" + currentSkin + "\\Playing.opi";
+		if (customPlayingPath.size() > 255) customPlayingPath = (customPlayingPath.begin(), customPlayingPath.at(254));
+		strcpy(playingOpiPath, customPlayingPath.c_str());
+	}
+	else
+	{
+		configPath = "O2GraphicExt.json";
+		strcpy(playingOpiPath, "Image\\Playing1.opi");
+	}
+
+	cfgInFile.open(configPath);
+	config = json::parse(cfgInFile);
+
 	try {
 		hitPosition = config["Noteplain"]["HitPosition"];
 		laneWidth = config["Noteplain"]["LaneWidth"].get<std::vector<int>>();
@@ -510,7 +545,7 @@ void __fastcall OnInitPlayingScene(DWORD* pThis, DWORD edx, DWORD unk1, DWORD un
 
 		config.merge_patch(element);
 		std::ofstream cfgOutFile;
-		cfgOutFile.open("O2GraphicExt.json");
+		cfgOutFile.open(configPath);
 		cfgOutFile << std::setw(4) << config << std::endl;
 		cfgOutFile.close();
 	}
@@ -527,11 +562,13 @@ void __fastcall OnInitPlayingScene(DWORD* pThis, DWORD edx, DWORD unk1, DWORD un
 
 		config.merge_patch(element);
 		std::ofstream cfgOutFile;
-		cfgOutFile.open("O2GraphicExt.json");
+		cfgOutFile.open(configPath);
 		cfgOutFile << std::setw(4) << config << std::endl;
 		cfgOutFile.close();
 	}
 	cfgInFile.close();
+
+
 
 	*noteplainRectHeight = *shortNoteOffset = *lnBodyOffset = *lnTailOffset =
 	*guideLineOffset = *measureLineOffset = *lnHeadLimit = *lnBodyLimit = *noteRenderCutoff =
