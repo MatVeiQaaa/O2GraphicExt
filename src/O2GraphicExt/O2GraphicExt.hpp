@@ -10,16 +10,17 @@ struct ResDetails
 	char name[256];
 };
 
-struct OJT
+struct BitmapDescription
 {
-	uintptr_t* vTable;
-	BYTE unk1[0x28];
-	float XScale;
-	float YScale;
-	BYTE unk2[0x20];
-	int currentFrame;
-	BYTE unk3[0x4];
-	float scaleAllRelative;
+	short posX;
+	short posY;
+	unsigned short width;
+	unsigned short height;
+	unsigned short offset;
+	short padding1;
+	unsigned short imageSize;
+	short padding2;
+	int padding3;
 };
 
 struct Frame
@@ -27,11 +28,30 @@ struct Frame
 	uintptr_t* vTable;
 	BYTE unk1[0x14];
 	char name[256];
-	short frameCount;
+	short unk2;
 	short encoder;
-	BYTE unk2[0x24];
+	short frameCount;
+	short alphaKey;
+	BitmapDescription* frameDescription;
+	uintptr_t* bitmapPtr;
+	BYTE unk3[0xC];
+	unsigned int currentIdx;
+	BYTE unk4[0x8];
 	int YSize;
 	int XSize;
+};
+
+struct OJT
+{
+	uintptr_t* vTable;
+	BYTE unk1[0x24];
+	Frame* frame;
+	float XScale;
+	float YScale;
+	BYTE unk2[0x20];
+	int currentFrame;
+	BYTE unk3[0x4];
+	float scaleAllRelative;
 };
 
 struct Data

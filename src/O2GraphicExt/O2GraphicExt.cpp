@@ -30,12 +30,21 @@ std::string configPath = "O2GraphicExt.json";
 
 int* previousState = NULL;
 int* currentState = NULL;
+short* MessageBoxType = NULL;
 short* MessageBoxFunction = NULL;
 char* MessageBoxText = NULL;
 int noteplainX = 21;
+int* noteplainRectWidth = nullptr;
 int hitPosition = 480;
 
 std::vector<std::string> addResources;
+
+typedef uintptr_t(__cdecl* o2HeapAlloc)(unsigned int size);
+o2HeapAlloc O2HeapAllocClean = nullptr;
+o2HeapAlloc O2HeapAllocDirty = nullptr;
+
+typedef int(__cdecl* o2HeapFree)(uintptr_t* buffer);
+o2HeapFree O2HeapFree = nullptr;
 
 typedef bool(__thiscall* sub_4690)(DWORD* pThis, DWORD arg1, char* resName, DWORD arg3, DWORD arg4);
 sub_4690 Sub_4690 = NULL; // Called from LoadSceneRes.
@@ -236,25 +245,26 @@ void __fastcall OnSetPosition(Data* data, DWORD edx, int posX, int posY)
 {
 	if (*currentState == 11)
 	{
-		DWORD* currentScenePtr = (DWORD*)FollowPointers(hOtwo, { 0x1C8884, 0x0D40 });
-		Resource* comboTextRes = (Resource*)FollowPointers(*currentScenePtr, { 0x598 + 0xF * 4, 0 });
-		Resource* judgeCoolRes = (Resource*)FollowPointers(*currentScenePtr, { 0x598 + 0xE * 4, 0 });
-		Resource* judgeGoodRes = (Resource*)FollowPointers(*currentScenePtr, { 0x598 + 0xD * 4, 0 });
-		Resource* judgeBadRes = (Resource*)FollowPointers(*currentScenePtr, { 0x598 + 0xC * 4, 0 });
-		Resource* judgeMissRes = (Resource*)FollowPointers(*currentScenePtr, { 0x598 + 0xB * 4, 0 });
-		if (comboTextRes && (data == comboTextRes->data || data == judgeCoolRes->data || 
-			data == judgeGoodRes->data || data == judgeBadRes->data || data == judgeMissRes->data))
+		if (data->type == 3 && (strncmp(data->ojt->frame->name, "Note_ComboNum", 13) == 0)) return SetPosition(data, posX, posY);
+		if (data->type == 3 && (strncmp(data->ojt->frame->name, "Note_Combo", 10) == 0 ||
+			strncmp(data->ojt->frame->name, "Note_Cool", 9) == 0 ||
+			strncmp(data->ojt->frame->name, "Note_Good", 9) == 0 ||
+			strncmp(data->ojt->frame->name, "Note_Bad", 8) == 0 ||
+			strncmp(data->ojt->frame->name, "Note_Miss", 9) == 0
+			)
+			)
 		{
-			posX = posX + noteplainX - 21;
+			posX = posX + noteplainX - 21 + (*noteplainRectWidth - 193) / 2;
 		}
-		if (data->frame && (strncmp(data->frame->name, "Note_Jam.ojs", 12) == 0 ||
+		if (data->type == 1 && (strncmp(data->frame->name, "Note_Jam.ojs", 12) == 0 ||
 			strncmp(data->frame->name, "Life_gauge_back.ojs", 19) == 0 ||
 			strncmp(data->frame->name, "Life_gauge_bar.ojs", 18) == 0 || 
 			strncmp(data->frame->name, "Note_BG.ojs", 11) == 0
 			)
 			)
 		{
-			posX = posX + noteplainX - 21;
+			if (strncmp(data->frame->name, "Note_Jam.ojs", 12) == 0) posX = posX + noteplainX - 21 + (*noteplainRectWidth - 193) / 2;
+			else posX = posX + noteplainX - 21 + (*noteplainRectWidth - 193);
 		}
 	}
 	return SetPosition(data, posX, posY);
@@ -360,7 +370,7 @@ drawJamCombo DrawJamCombo = NULL; // Called from judgement animation function.
 
 int __fastcall OnDrawJamCombo(DWORD* pThis, DWORD edx, int combo, int x, int y)
 {
-	return DrawJamCombo(pThis, combo, x + noteplainX - 21, y);
+	return DrawJamCombo(pThis, combo, x + noteplainX - 21 + (*noteplainRectWidth - 193) / 2, y);
 }
 
 typedef int(__thiscall* drawCombo)(DWORD* pThis, int combo, int x, int y);
@@ -376,12 +386,10 @@ int __fastcall OnDrawCombo(DWORD* pThis, DWORD edx, int combo, int x, int y)
 	char* twoCorrectionOpcode = (char*)(hOtwo + 0x2887F);
 	int gap = -comboDigitWidth - comboDigitsSpacing;
 	int digitsCount = combo > 9 ? (int)log10((double)combo) + 1 : 1;
-	x = noteplainX - 21 + comboCentrePoint + (comboDigitWidth + comboDigitsSpacing) / 2 * digitsCount;
+	x = noteplainX - 21 + (*noteplainRectWidth - 193) / 2 + comboCentrePoint + (comboDigitWidth + comboDigitsSpacing) / 2 * digitsCount;
 	*offsetTens = gap;
 	*offsetHundreds = gap * 2;
 	*offsetThousands = gap * 3;
-	/*0x2886A - increase digit X position for number 1 as 1 - byte unsigned int. (Default = 5)
-	0x2887F - increase digit X position by 1 for number 2 as opcode 0x42 (inc edx), can replace for 0x90 to disable.*/
 	if (comboSmallNumberCorrections)
 	{
 		*oneCorrection = 5;
@@ -399,7 +407,6 @@ int __fastcall OnDrawCombo(DWORD* pThis, DWORD edx, int combo, int x, int y)
 typedef uintptr_t(__thiscall* loadRes)(DWORD* pThis, ResDetails* resDetails, DWORD* set);
 loadRes LoadRes = NULL; // Called from various scene loading functions.
 
-//Resource* testRes;
 bool firstTimeForPlaying = true;
 uintptr_t __fastcall OnLoadRes(DWORD* pThis, DWORD edx, ResDetails* resDetails, DWORD* set)
 {
@@ -454,12 +461,12 @@ typedef void(__thiscall* initPlayingScene)(DWORD* pThis, DWORD unk1, DWORD unk2)
 initPlayingScene InitPlayingScene = NULL;
 
 int* playingRectHeight = nullptr;
-int* noteplainRectWidth = nullptr;
 int* noteplainRectHeight = nullptr;
 int* shortNoteOffset = nullptr;
 int* lnBodyOffset = nullptr;
 int* lnTailOffset = nullptr;
 int* guideLineOffset = nullptr;
+int* guidelinesOffset = nullptr;
 int* measureLineOffset = nullptr;
 int* lnHeadLimit = nullptr;
 int* lnBodyLimit = nullptr;
@@ -517,7 +524,16 @@ void __fastcall OnInitPlayingScene(DWORD* pThis, DWORD edx, DWORD unk1, DWORD un
 	}
 
 	cfgInFile.open(configPath);
-	config = json::parse(cfgInFile);
+	try {
+		config = json::parse(cfgInFile);
+	}
+	catch (...) {
+		std::ofstream cfgOutFile;
+		cfgOutFile.open(configPath);
+		cfgOutFile << std::setw(4) << config << std::endl;
+		cfgOutFile.close();
+		config = json();
+	}
 
 	try {
 		hitPosition = config["Noteplain"]["HitPosition"];
@@ -568,11 +584,17 @@ void __fastcall OnInitPlayingScene(DWORD* pThis, DWORD edx, DWORD unk1, DWORD un
 	}
 	cfgInFile.close();
 
-
-
-	*noteplainRectHeight = *shortNoteOffset = *lnBodyOffset = *lnTailOffset =
-	*guideLineOffset = *measureLineOffset = *lnHeadLimit = *lnBodyLimit = *noteRenderCutoff =
-	*unkHitpos1 = *unkHitpos2 = *unkHitpos3 = hitPosition;
+	if (*lnTailOffset == 0x90909090)
+	{
+		*MessageBoxFunction = 0;
+		strcpy(MessageBoxText, "Please re-enable LongNote Tail in EstrolMultiTool");
+		*MessageBoxType = 1;
+	}
+	else *lnTailOffset = hitPosition - *noteThickness;
+	*shortNoteOffset = *lnBodyOffset = *lnHeadLimit = *lnBodyLimit = hitPosition - *noteThickness;
+	*guidelinesOffset = hitPosition - *noteThickness / 2;
+	*noteplainRectHeight = *guideLineOffset = *measureLineOffset =  *noteRenderCutoff =
+	*unkHitpos2 = *unkHitpos3 = hitPosition;
 
 	if (hitPosition > 512) *playingRectHeight = hitPosition;
 
@@ -651,7 +673,8 @@ void __fastcall OnRenderDataSimple(Data* data, DWORD edx, int frameIdx, int posX
 	if (data->type != 1) return RenderDataSimple(data, frameIdx, posX, posY, arg3, arg4);
 
 	if (strncmp(data->frame->name, "Jam_gauge_bar.ojs", 17) == 0 ||
-		strncmp(data->frame->name, "Jam_gauge_text.ojs", 18) == 0)
+		strncmp(data->frame->name, "Jam_gauge_text.ojs", 18) == 0 ||
+		strncmp(data->frame->name, "Note_BG.ojs", 11) == 0)
 	{
 		posX = noteplainX - 21;
 	}
@@ -690,7 +713,6 @@ void __fastcall OnSetEmbeddedPosition(DWORD* pThis, DWORD edx, DWORD posX, DWORD
 			posY = posY + hitPosition - 480;
 
 			Resource* noteBgRes = (Resource*)FollowPointers(hOtwo, { 0x1C8884, 0x0D40,  0x598 + 0x4, 0 });
-			noteBgRes->data->X = noteplainX - 21;
 			RenderData(noteBgRes->data, 0);
 		}
 	}
@@ -764,11 +786,202 @@ int __fastcall OnRenderBg(DWORD* pThis, DWORD edx)
 	return result;
 }
 
+#include "GDIPlusManager.hpp"
+
+#include <gdiplus.h>
+
+#pragma comment(lib, "Gdiplus.lib")
+struct RescaledBitmap {
+	uint8_t* data;
+
+	int width = 0;
+	int height = 0;
+	int frameCount = 0;
+};
+
+RescaledBitmap* RescaleImage24bit(int* pSourceResource, RescaledBitmap* pRescaledResource, int frameCount, int origWidth, int origHeight, int targetWidth, int targetHeight)
+{
+	GDIPlusManager::Init();
+	RescaledBitmap* resPtr;
+
+	{
+		Gdiplus::Bitmap original(origWidth, origHeight * frameCount, PixelFormat24bppRGB);
+		{
+			for (int i = 0; i < origHeight * frameCount; i++) {
+				for (int j = 0; j < origWidth; j++) {
+					const char* pos = (char*)pSourceResource + j * 3 + i * (origWidth * 3);
+
+					char r = pos[0];
+					char g = pos[1];
+					char b = pos[2];
+
+					original.SetPixel(j, i, Gdiplus::Color(r, g, b));
+				}
+			}
+		}
+
+		Gdiplus::Bitmap bmp(targetWidth, targetHeight * frameCount, PixelFormat24bppRGB);
+		{
+			Gdiplus::Graphics graphics(&bmp);
+			graphics.SetSmoothingMode(Gdiplus::SmoothingModeAntiAlias);
+			graphics.SetPixelOffsetMode(Gdiplus::PixelOffsetModeHighQuality);
+			graphics.SetInterpolationMode(Gdiplus::InterpolationMode::InterpolationModeNearestNeighbor);
+			graphics.DrawImage(&original, 0, 0, targetWidth, targetHeight * frameCount);
+		}
+
+		RescaledBitmap& result = *pRescaledResource;
+		result.width = targetWidth;
+		result.height = targetHeight;
+		result.frameCount = frameCount;
+		result.data = new uint8_t[targetWidth * targetHeight * frameCount * 3];
+		{
+			int offset = 0;
+			for (int y = 0; y < targetHeight * frameCount; y++) {
+				for (int x = 0; x < targetWidth; x++) {
+					Gdiplus::Color color;
+					bmp.GetPixel(x, y, &color);
+
+					result.data[offset] = color.GetR();
+					result.data[offset + 1] = color.GetG();
+					result.data[offset + 2] = color.GetB();
+
+					offset += 3;
+				}
+			}
+		}
+		resPtr = &result;
+	}
+
+	GDIPlusManager::Deinit();
+	return resPtr;
+}
+
+typedef int(__thiscall* O2BeforeLoadImage)(DWORD* pThis);
+O2BeforeLoadImage BeforeLoadImage = nullptr;
+
+typedef int(__thiscall* loadImage)(DWORD* pThis, int frame, int xRight, int yBottom, int* a5, int color);
+loadImage pLoadImage = nullptr;
+loadImage LoadLNImage = nullptr;
+
+int __fastcall OnLoadLNImage(DWORD* pThis, DWORD edx, int frame, int xRight, int yBottom, int* a5, int color)
+{
+	return LoadLNImage(pThis, frame, xRight, hitPosition, a5, color);
+}
+
+typedef int(__thiscall* GameLoadImage)(DWORD* pThis, int* pResource);
+GameLoadImage LoadTargetBar = nullptr;
+
+RescaledBitmap targetBar = RescaledBitmap();
+int __fastcall OnLoadTargetBar(DWORD* pThis, DWORD edx, int* pResource)
+{
+	BeforeLoadImage(pThis);
+	RescaledBitmap& newRes = *RescaleImage24bit(pResource, &targetBar, 3, 190,73, 190 + *noteplainRectWidth - 193, 73);
+	return pLoadImage(pThis, newRes.frameCount, newRes.width, newRes.height, (int*)newRes.data, -1);
+}
+
+GameLoadImage LoadMeasureLine = nullptr;
+
+RescaledBitmap measureLine = RescaledBitmap();
+int __fastcall OnLoadMeasureLine(DWORD* pThis, DWORD edx, int* pResource)
+{
+	BeforeLoadImage(pThis);
+	RescaledBitmap& newRes = *RescaleImage24bit(pResource, &measureLine, 3, 0xBC, 3, 0xBC + *noteplainRectWidth - 193, 3);
+	return pLoadImage(pThis, newRes.frameCount, newRes.width, newRes.height, (int*)newRes.data, -1);
+}
+
+void RescaleImage16bit(int* pSourceResource, int* pBuffer, int origWidth, int origHeight, int targetWidth, int targetHeight)
+{
+	GDIPlusManager::Init();
+	{
+		Gdiplus::Bitmap original(origWidth, origHeight, origWidth * 2, PixelFormat16bppRGB555, (BYTE*)pSourceResource);
+
+		Gdiplus::Bitmap bmp(targetWidth, targetHeight, PixelFormat16bppRGB555);
+		{
+			Gdiplus::Graphics graphics(&bmp);
+			graphics.SetPixelOffsetMode(Gdiplus::PixelOffsetModeHighQuality);
+			graphics.SetInterpolationMode(Gdiplus::InterpolationMode::InterpolationModeNearestNeighbor);
+			graphics.DrawImage(&original, 0, 0, targetWidth, targetHeight);
+		}
+
+		Gdiplus::BitmapData data;
+		Gdiplus::Rect rect(0, 0, bmp.GetWidth(), bmp.GetHeight());
+		bmp.LockBits(&rect, Gdiplus::ImageLockModeRead, PixelFormat16bppRGB555, &data);
+		for (int i = 0; i < bmp.GetHeight(); i++)
+		{
+			memcpy((void*)((uintptr_t)pBuffer + i * bmp.GetWidth() * 2), (void*)((uintptr_t)data.Scan0 + i * data.Stride), bmp.GetWidth() * 2);
+		}
+	}
+	GDIPlusManager::Deinit();
+	return;
+}
+
+typedef void(__thiscall* setSurfaceRect)(Frame* surface, int width, int height, int arg3, int alphaKey);
+setSurfaceRect SetSurfaceRect = nullptr;
+
+typedef int(__thiscall* readBitmapFromOpi)(Frame* surface, int* buffer, DWORD* vTable, short width, short height, short stride);
+readBitmapFromOpi ReadBitmapFromOpi = nullptr;
+
+int __fastcall OnReadBitmapFromOpi(Frame* surface, DWORD edx, int* buffer, DWORD* vTable, short width, short height, short stride)
+{
+	if (strncmp(surface->name, "Note_BG.ojs", 11) == 0)
+	{
+		ReadBitmapFromOpi(surface, buffer, vTable, width, height, stride);
+		int newWidth = width + *noteplainRectWidth - 193;
+		int* newBuffer = (int*)O2HeapAllocDirty(newWidth * height * 2);
+		RescaleImage16bit(buffer, newBuffer, width, height, newWidth, height);
+		O2HeapFree((uintptr_t*)buffer);
+		BitmapDescription* currentBitmapDescription = (BitmapDescription*)((uintptr_t)surface->frameDescription + surface->currentIdx * sizeof(BitmapDescription));
+		currentBitmapDescription->width = newWidth;
+		currentBitmapDescription->imageSize = newWidth * height * 2;
+		currentBitmapDescription->posX = 0;
+		currentBitmapDescription->posY = 0;
+		uintptr_t* currentBitmapPtr = (uintptr_t*)((uintptr_t)surface->bitmapPtr + 4 * surface->currentIdx);
+		*currentBitmapPtr = (uintptr_t)newBuffer;
+		SetSurfaceRect(surface, newWidth, height, 0, surface->alphaKey); // if size of this is less than surface->frameDescription sizes, the game will come to your place and break your knees. (if will fail to create DirectDrawSurface7 object)
+		return 1;
+	}
+	if (strncmp(surface->name, "Keyeffect.ojs", 13) == 0)
+	{
+		ReadBitmapFromOpi(surface, buffer, vTable, width, height, stride);
+		BitmapDescription* currentBitmapDescription = (BitmapDescription*)((uintptr_t)surface->frameDescription + surface->currentIdx * sizeof(BitmapDescription));
+		int newWidth = laneWidth[surface->currentIdx];
+		currentBitmapDescription->width = newWidth;
+		currentBitmapDescription->imageSize = newWidth * height * 2;
+		std::vector<int> defaultKeyeffectX = { 23, 51, 73, 101, 133, 161, 183 };
+		currentBitmapDescription->posX = defaultKeyeffectX[surface->currentIdx];
+		int* newBuffer = (int*)O2HeapAllocDirty(newWidth * height * 2);
+		RescaleImage16bit(buffer, newBuffer, width, height, newWidth, height);
+		O2HeapFree((uintptr_t*)buffer);
+		uintptr_t* currentBitmapPtr = (uintptr_t*)((uintptr_t)surface->bitmapPtr + 4 * surface->currentIdx);
+		*currentBitmapPtr = (uintptr_t)newBuffer;
+		SetSurfaceRect(surface, newWidth, height, 0, surface->alphaKey);
+		return 1;
+	}
+	if (strncmp(surface->name, "Note_Combo", 10) == 0 ||
+		strncmp(surface->name, "Note_Cool", 9) == 0 ||
+		strncmp(surface->name, "Note_Good", 9) == 0 ||
+		strncmp(surface->name, "Note_Bad", 8) == 0 ||
+		strncmp(surface->name, "Note_Miss", 9) == 0 ||
+		strncmp(surface->name, "Note_Click", 10) == 0 ||
+		strncmp(surface->name, "Note_Jam", 8) == 0)
+	{
+		BitmapDescription* currentBitmapDescription = (BitmapDescription*)((uintptr_t)surface->frameDescription + surface->currentIdx * sizeof(BitmapDescription));
+		currentBitmapDescription->posX = 18;
+		//SetSurfaceRect(surface, width, height, 0, surface->alphaKey);
+	}
+
+	return ReadBitmapFromOpi(surface, buffer, vTable, width, height, stride);
+}
+
 int O2GraphicExt::init(HMODULE hModule)
 {
 	hOtwo = (uintptr_t)GetModuleHandle("OTwo.exe");
 	MODULEINFO modOtwo;
 	GetModuleInformation(GetCurrentProcess(), (HMODULE)hOtwo, &modOtwo, sizeof(MODULEINFO));
+
+	O2HeapAllocClean = (o2HeapAlloc)((uintptr_t)hOtwo + 0xB9F8C);
+	O2HeapAllocDirty = (o2HeapAlloc)((uintptr_t)hOtwo + 0xB7E62);
+	O2HeapFree = (o2HeapFree)((uintptr_t)hOtwo + 0xA9DB0);
 
 	LoadSceneElement = (loadSceneElement)((uintptr_t)hOtwo + 0x05B0C0);
 	LoadRes = (loadRes)((uintptr_t)hOtwo + 0x0303A0);
@@ -791,6 +1004,14 @@ int O2GraphicExt::init(HMODULE hModule)
 	DrawJamCombo = (drawJamCombo)((uintptr_t)hOtwo + 0x05C500);
 	DrawPill = (drawPill)((uintptr_t)hOtwo + 0x5C6C0);
 
+	SetSurfaceRect = (setSurfaceRect)((uintptr_t)hOtwo + 0x0B330);
+	ReadBitmapFromOpi = (readBitmapFromOpi)((uintptr_t)hOtwo + 0x0E5A0);
+	BeforeLoadImage = (O2BeforeLoadImage)((uintptr_t)hOtwo + 0x7D150);
+	pLoadImage = (loadImage)((uintptr_t)hOtwo + 0x86CA0);
+	LoadLNImage = (loadImage)((uintptr_t)hOtwo + 0x86E40);
+	LoadTargetBar = (GameLoadImage)((uintptr_t)hOtwo + 0x7D0F0);
+	LoadMeasureLine = (GameLoadImage)((uintptr_t)hOtwo + 0x7D030);
+
 	playingRectHeight = (int*)((uintptr_t)hOtwo + 0x0DD03);
 	noteplainRectWidth = (int*)((uintptr_t)hOtwo + 0x233E8);
 	noteplainRectHeight = (int*)((uintptr_t)hOtwo + 0x233D1);
@@ -802,7 +1023,7 @@ int O2GraphicExt::init(HMODULE hModule)
 	lnBodyOffset = (int*)((uintptr_t)hOtwo + 0x7E435);
 	lnTailOffset = (int*)((uintptr_t)hOtwo + 0x7E467);
 	noteRenderCutoff = (int*)((uintptr_t)hOtwo + 0x7EA2D);
-	unkHitpos1 = (int*)((uintptr_t)hOtwo + 0x7E3DF);
+	guidelinesOffset = (int*)((uintptr_t)hOtwo + 0x7E3DF);
 	unkHitpos2 = (int*)((uintptr_t)hOtwo + 0x7E401);
 	unkHitpos3 = (int*)((uintptr_t)hOtwo + 0x7E84E);
 	noteThickness = (BYTE*)((uintptr_t)hOtwo + 0x7EA58);
@@ -857,6 +1078,7 @@ int O2GraphicExt::init(HMODULE hModule)
 	while (!*stateManager) Sleep(50); // wait for StateManager to initialize.
 	previousState = (int*)FollowPointers(hOtwo, { 0x1C8884, 0x4C });
 	currentState = (int*)FollowPointers(hOtwo, { 0x1C8884, 0x50 });
+	MessageBoxType = (short*)FollowPointers(hOtwo, { 0x1C8884, 0x5E });
 	MessageBoxFunction = (short*)FollowPointers(hOtwo, { 0x1C8884, 0x5C });
 	MessageBoxText = (char*)FollowPointers(hOtwo, { 0x1C8884, 0x64 });
 
@@ -978,6 +1200,30 @@ int O2GraphicExt::init(HMODULE hModule)
 	if (MH_CreateHookEx((LPVOID)SetNoteParams, &OnSetNoteParams, &SetNoteParams) != MH_OK)
 	{
 		Logger("Couldn't hook SetNoteParams");
+		return 1;
+	}
+
+	if (MH_CreateHookEx((LPVOID)ReadBitmapFromOpi, &OnReadBitmapFromOpi, &ReadBitmapFromOpi) != MH_OK)
+	{
+		Logger("Couldn't hook ReadBitmapFromOpi");
+		return 1;
+	}
+
+	if (MH_CreateHookEx((LPVOID)LoadLNImage, &OnLoadLNImage, &LoadLNImage) != MH_OK)
+	{
+		Logger("Couldn't hook LoadLNImage");
+		return 1;
+	}
+
+	if (MH_CreateHookEx((LPVOID)LoadTargetBar, &OnLoadTargetBar, &LoadTargetBar) != MH_OK)
+	{
+		Logger("Couldn't hook LoadTargetBar");
+		return 1;
+	}
+
+	if (MH_CreateHookEx((LPVOID)LoadMeasureLine, &OnLoadMeasureLine, &LoadMeasureLine) != MH_OK)
+	{
+		Logger("Couldn't hook LoadMeasureLine");
 		return 1;
 	}
 

@@ -166,9 +166,11 @@
   </ItemDefinitionGroup>
   <ItemGroup>
     <ClCompile Include="dllmain.cpp" />
+    <ClCompile Include="GDIPlusManager.cpp" />
     <ClCompile Include="O2GraphicExt.cpp" />
   </ItemGroup>
   <ItemGroup>
+    <ClInclude Include="GDIPlusManager.hpp" />
     <ClInclude Include="helpers.hpp" />
     <ClInclude Include="O2GraphicExt.hpp" />
   </ItemGroup>
